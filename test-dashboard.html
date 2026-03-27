@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>内容创作AI-Agent 启动测试看板</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg0:#fff7ed;
+      --bg1:#f0f9ff;
+      --ink:#0f172a;
+      --muted:#64748b;
+      --card:rgba(255,255,255,.74);
+      --border:#e2e8f0;
+      --shadow: 0 18px 40px rgba(15, 23, 42, 0.10);
+      --accent:#22c55e;
+      --accent2:#38bdf8;
+      --danger:#ef4444;
+      --warn:#f59e0b;
+    }
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","PingFang SC","Microsoft Yahei",sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% 10%, rgba(56,189,248,.18), transparent 60%),
+        radial-gradient(900px 500px at 90% 20%, rgba(34,197,94,.14), transparent 55%),
+        radial-gradient(800px 520px at 50% 100%, rgba(251,146,60,.18), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      color:var(--ink);
+    }
+    .layout{display:grid;grid-template-rows:auto 1fr;height:100vh;}
+    header{
+      padding:16px 22px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      background:rgba(255,255,255,.72);
+      backdrop-filter:blur(14px);
+    }
+    header h1{
+      margin:0;
+      font-size:18px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    header h1 span.logo-dot{
+      width:10px;height:10px;border-radius:9999px;
+      background:radial-gradient(circle at 30% 30%, var(--accent2), #a855f7);
+      box-shadow:0 0 16px rgba(56,189,248,.45);
+    }
+    .controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;}
+    .tag{
+      border-radius:9999px;
+      border:1px solid var(--border);
+      padding:6px 12px;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      background:rgba(255,255,255,.75);
+      transition:all .15s ease;
+      color:var(--ink);
+    }
+    .tag:hover{transform:translateY(-1px);}
+    .tag.active{
+      border-color:rgba(56,189,248,.75);
+      background:radial-gradient(circle at 0 0, rgba(56,189,248,.20), rgba(34,197,94,.10));
+      color:#0b1220;
+    }
+    .checkbox{display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--muted);}
+    .btn{
+      border-radius:9999px;
+      padding:7px 16px;
+      border:none;
+      cursor:pointer;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      background:linear-gradient(135deg,#34d399,#22c55e);
+      color:#fff;
+      box-shadow:0 10px 22px rgba(34,197,94,.22);
+      transition:all .15s ease;
+    }
+    .btn.secondary{
+      background:rgba(255,255,255,.75);
+      border:1px solid var(--border);
+      color:var(--ink);
+      box-shadow:none;
+    }
+    .btn:disabled{opacity:.6;cursor:not-allowed;box-shadow:none;}
+    .btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(34,197,94,.28);}
+    main{padding:16px 20px 20px;overflow:auto;}
+    .grid{display:grid;grid-template-columns:2fr 2fr 3fr;gap:16px;}
+    .card{
+      background:var(--card);
+      border-radius:18px;
+      border:1px solid var(--border);
+      padding:14px 16px;
+      box-shadow:var(--shadow);
+      min-height:140px;
+    }
+    .card h2{margin:0 0 8px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+    .meta{font-size:12px;color:var(--muted);}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px;}
+    .summary-item{
+      padding:8px 10px;
+      border-radius:12px;
+      background:rgba(255,255,255,.65);
+      border:1px solid var(--border);
+      font-size:11px;
+    }
+    .summary-item .label{color:var(--muted);margin-bottom:4px;}
+    .summary-item .value{font-size:14px;font-weight:600;}
+    .badge{
+      display:inline-flex;align-items:center;border-radius:9999px;padding:2px 8px;font-size:11px;
+      border:1px solid var(--border);color:var(--muted);gap:4px;background:rgba(255,255,255,.65);
+    }
+    .status-dot{width:6px;height:6px;border-radius:9999px;}
+    .status-ok{background:var(--accent);box-shadow:0 0 10px rgba(34,197,94,.35);}
+    .status-warn{background:var(--warn);box-shadow:0 0 10px rgba(245,158,11,.28);}
+    .status-bad{background:var(--danger);box-shadow:0 0 10px rgba(239,68,68,.28);}
+    .modules-list{margin-top:6px;font-size:12px;max-height:220px;overflow:auto;}
+    .module-row{
+      display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:6px;align-items:center;padding:4px 0;
+      border-bottom:1px dashed rgba(148,163,184,.55);
+    }
+    .module-row:last-child{border-bottom:none;}
+    .pill{
+      border-radius:9999px;padding:2px 8px;font-size:11px;text-align:center;
+      background:rgba(255,255,255,.7);border:1px solid var(--border);
+    }
+    .pill.green{border-color:rgba(34,197,94,.55);color:#166534;}
+    .pill.yellow{border-color:rgba(245,158,11,.55);color:#92400e;}
+    .pill.red{border-color:rgba(239,68,68,.55);color:#991b1b;}
+    .progress-bar{position:relative;height:6px;border-radius:9999px;background:rgba(148,163,184,.25);overflow:hidden;}
+    .progress-fill{position:absolute;left:0;top:0;bottom:0;border-radius:9999px;}
+    .report-area{
+      width:100%;height:220px;resize:none;background:rgba(255,255,255,.75);
+      border-radius:12px;border:1px solid var(--border);color:var(--ink);
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+      font-size:12px;padding:10px;box-sizing:border-box;
+    }
+    .hint{font-size:11px;color:var(--muted);margin-top:6px;}
+    @media (max-width:1100px){.grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header>
+      <h1>
+        <span class="logo-dot"></span>
+        启动测试看板 · 内容创作AI-Agent
+      </h1>
+      <div class="controls">
+        <span style="font-size:12px;color:var(--muted);">模块：</span>
+        <button class="tag active" data-module="auth">认证</button>
+        <button class="tag active" data-module="materials">素材库</button>
+        <button class="tag active" data-module="tags">标签</button>
+        <button class="tag active" data-module="uploads">上传</button>
+        <button class="tag active" data-module="ai">AI生成</button>
+        <button class="tag active" data-module="adapter">平台适配</button>
+        <button class="tag active" data-module="records">创作记录</button>
+        <button class="tag active" data-module="statistics">统计分析</button>
+        <button class="tag active" data-module="dashboard">仪表盘</button>
+        <button class="tag active" data-module="security">安全</button>
+        <label class="checkbox">
+          <input id="perf-checkbox" type="checkbox" style="margin:0;" />
+          <span>包含性能测试</span>
+        </label>
+        <button id="run-btn" class="btn">
+          <span>开始测试</span>
+        </button>
+      </div>
+    </header>
+    <main>
+      <div class="grid">
+        <section class="card">
+          <h2>
+            总体测试概况
+            <span class="badge">
+              <span id="status-dot" class="status-dot status-warn"></span>
+              <span id="status-text">待运行</span>
+            </span>
+          </h2>
+          <div class="meta" id="meta-text">
+            请选择模块并点击“开始测试”，看板会展示验收级测试结果（完成度 / 通过率 / 质量指数）。
+          </div>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <div class="label">用例总数</div>
+              <div class="value" id="total-cases">-</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">通过 / 失败 / 跳过</div>
+              <div class="value" id="pass-fail-skip">-</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">整体通过率</div>
+              <div class="value" id="total-pass-rate">-</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">pytest 退出码</div>
+              <div class="value" id="exit-code">-</div>
+            </div>
+          </div>
+          <p class="hint">
+            后端接口：<code style="color:var(--muted);">POST /api/v1/test/run</code>（本地 file:// 打开亦可；需后端允许 CORS）。
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>
+            模块维度 · 完成度 &amp; 通过率
+            <span class="badge">
+              <span style="width:6px;height:6px;border-radius:9999px;background:#38bdf8;"></span>
+              实时统计
+            </span>
+          </h2>
+          <div class="modules-list" id="modules-list">
+            <!-- 动态填充模块数据 -->
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>
+            测试报告（Markdown）
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button id="copy-btn" class="btn secondary" style="font-size:11px;padding:4px 10px;">复制报告</button>
+              <button id="download-btn" class="btn secondary" style="font-size:11px;padding:4px 10px;">导出测试报告.md</button>
+            </div>
+          </h2>
+          <textarea id="report-area" class="report-area" readonly></textarea>
+          <div class="hint">
+            报告格式对齐项目中的 <code>测试报告.md</code> 模板，可直接纳入测试与运维文档。
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // 后端测试 API 基地址
+    // 默认指向本项目后端服务 http://localhost:8000/api/v1
+    // 如需指向其他地址，可在 URL 中通过 ?api=xxx 覆盖
+    function resolveApiBase() {
+      try {
+        const params = new URLSearchParams(location.search);
+        const override = params.get("api");
+        if (override) {
+          return override.replace(/\/+$/, "");
+        }
+      } catch (e) {
+        // ignore
+      }
+      // 本地 file:// 打开时，直接使用默认后端地址
+      if (location.protocol === "file:") {
+        return "http://localhost:8000/api/v1";
+      }
+      // 若通过 http/https 提供静态页面，优先假设后端与当前域共享主机名，但端口为 8000
+      if (location.protocol === "http:" || location.protocol === "https:") {
+        const url = new URL(location.href);
+        const base = url.protocol + "//" + url.hostname + ":8000";
+        return base.replace(/\/+$/, "") + "/api/v1";
+      }
+      // 兜底
+      return "http://localhost:8000/api/v1";
+    }
+
+    const API_BASE = resolveApiBase();
+
+    const state = {
+      selectedModules: ["auth","materials","tags","uploads","ai","adapter","records","statistics","dashboard","security"],
+      includePerformance: false,
+      summary: null,
+      modules: [],
+      markdown: ""
+    };
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function setStatus(passRate) {
+      const dot = $("status-dot");
+      const text = $("status-text");
+      dot.classList.remove("status-ok","status-warn","status-bad");
+      if (passRate === null) {
+        dot.classList.add("status-warn");
+        text.textContent = "待运行";
+        return;
+      }
+      if (passRate >= 90) {
+        dot.classList.add("status-ok");
+        text.textContent = "质量优秀";
+      } else if (passRate >= 70) {
+        dot.classList.add("status-warn");
+        text.textContent = "有优化空间";
+      } else {
+        dot.classList.add("status-bad");
+        text.textContent = "需重点关注";
+      }
+    }
+
+    function pillClass(score) {
+      if (score >= 90) return "pill green";
+      if (score >= 70) return "pill yellow";
+      return "pill red";
+    }
+
+    function renderModules(mods) {
+      const container = $("modules-list");
+      container.innerHTML = "";
+      if (!mods || !mods.length) {
+        container.innerHTML = '<div style="color:var(--muted);font-size:12px;">暂无测试结果，请先运行一次测试。</div>';
+        return;
+      }
+      const header = document.createElement("div");
+      header.className = "module-row";
+      header.innerHTML = `
+        <div style="color:var(--muted);">模块</div>
+        <div style="color:var(--muted);text-align:center;">完成度</div>
+        <div style="color:var(--muted);text-align:center;">通过率</div>
+        <div style="color:var(--muted);text-align:center;">质量指数</div>
+      `;
+      container.appendChild(header);
+
+      // 默认排序：失败优先，其次质量指数从低到高（更利于排查）
+      const sorted = [...mods].sort((a, b) => {
+        const fa = a.failed ?? 0;
+        const fb = b.failed ?? 0;
+        if (fb !== fa) return fb - fa;
+        const qa = a.qualityScore ?? 0;
+        const qb = b.qualityScore ?? 0;
+        return qa - qb;
+      });
+
+      sorted.forEach(m => {
+        const row = document.createElement("div");
+        row.className = "module-row";
+        const completion = m.completionScore ?? 0;
+        const passRate = m.passRate ?? 0;
+        const quality = m.qualityScore ?? 0;
+        row.innerHTML = `
+          <div>
+            <div>${m.moduleName || m.moduleKey}</div>
+            <div style="font-size:11px;color:var(--muted);">${m.passed}/${m.executedCases} 通过</div>
+          </div>
+          <div>
+            <div class="${pillClass(completion)}">${completion.toFixed(1)}%</div>
+            <div class="progress-bar" style="margin-top:4px;">
+              <div class="progress-fill" style="width:${completion}%;background:linear-gradient(90deg,#38bdf8,#22c55e);"></div>
+            </div>
+          </div>
+          <div>
+            <div class="${pillClass(passRate)}">${passRate.toFixed(1)}%</div>
+            <div class="progress-bar" style="margin-top:4px;">
+              <div class="progress-fill" style="width:${passRate}%;background:linear-gradient(90deg,#22c55e,#16a34a);"></div>
+            </div>
+          </div>
+          <div>
+            <div class="${pillClass(quality)}">${quality.toFixed(1)}%</div>
+            <div class="progress-bar" style="margin-top:4px;">
+              <div class="progress-fill" style="width:${quality}%;background:linear-gradient(90deg,#a855f7,#6366f1);"></div>
+            </div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function generateMarkdown(summary) {
+      if (!summary) return "";
+      const {
+        totalCases,
+        totalPassed,
+        totalFailed,
+        totalSkipped,
+        modules,
+        exitCode
+      } = summary;
+      const totalPassRate = totalCases ? (totalPassed / totalCases) * 100 : 0;
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0,10);
+
+      let md = "";
+      md += "# 面向流媒体/自媒体营销的\"内容创作AI-Agent\"测试报告\n\n";
+      md += "---\n\n";
+      md += `**文档版本**：1.0  \n`;
+      md += `**编制日期**：${dateStr}  \n`;
+      md += `**编制人**：自动化测试平台  \n\n`;
+      md += "---\n\n";
+      md += "## 1. 测试概况\n\n";
+      md += "| 指标 | 数值 |\n";
+      md += "|------|------|\n";
+      md += `| 测试日期 | ${dateStr} |\n`;
+      md += `| 测试环境 | 本地/CI 后端 API + pytest |\n`;
+      md += `| 测试框架 | pytest (+ pytest-json-report) |\n`;
+      md += `| 用例执行结果 | **${totalPassed} / ${totalCases} (${totalPassRate.toFixed(1)}%)** |\n`;
+      md += `| pytest 退出码 | ${exitCode} |\n\n`;
+
+      md += "## 2. 按模块测试结果\n\n";
+      md += "| 模块 | 设计用例数 | 实际执行 | 通过 | 失败 | 跳过 | 通过率 | 完成度 | 功能评估指数 |\n";
+      md += "|------|------------|----------|------|------|------|--------|--------|---------------|\n";
+      (modules || []).forEach(m => {
+        const passRate = m.passRate ?? 0;
+        const completion = m.completionScore ?? 0;
+        const quality = m.qualityScore ?? 0;
+        md += `| ${m.moduleName || m.moduleKey} | ${m.plannedCases} | ${m.executedCases} | ${m.passed} | ${m.failed} | ${m.skipped} | ${passRate.toFixed(1)}% | ${completion.toFixed(1)}% | ${quality.toFixed(1)} |\n`;
+      });
+      md += "\n";
+
+      md += "## 3. 测试覆盖范围（按模块抽象）\n\n";
+      md += "```text\n";
+      (modules || []).forEach(m => {
+        const quality = m.qualityScore ?? 0;
+        const blocks = Math.round(quality / 5);
+        const bar = "█".repeat(blocks);
+        md += `${m.moduleName || m.moduleKey}  ${bar} ${quality.toFixed(1)}%\n`;
+      });
+      md += "```\n\n";
+
+      md += "## 4. 发现的问题与修复建议\n\n";
+      if (!totalFailed) {
+        md += "- 本轮测试中所有自动化用例均通过，暂未发现阻塞级缺陷。\n";
+      } else {
+        md += `- 本轮测试中共有 **${totalFailed}** 条用例失败，建议优先排查对应模块中严重影响主流程的缺陷。\n`;
+        md += "- 可结合失败用例的堆栈信息定位到具体接口或逻辑代码，并在修复后重新运行本测试看板验证。\n";
+      }
+      md += "\n";
+
+      md += "## 5. 结论\n\n";
+      if (totalPassRate >= 90) {
+        md += "- 系统整体质量良好，主要业务流程已通过自动化验证，可支持进一步的集成测试和试运行。\n";
+      } else if (totalPassRate >= 70) {
+        md += "- 系统基础功能基本可用，但仍存在一定比例失败用例，建议在修复关键问题后再进入正式发布阶段。\n";
+      } else {
+        md += "- 当前自动化测试通过率偏低，不建议直接上线，需要补充测试与缺陷修复后再次评估。\n";
+      }
+      md += "\n";
+
+      return md;
+    }
+
+    async function runTests() {
+      const runBtn = $("run-btn");
+      runBtn.disabled = true;
+      runBtn.textContent = "测试进行中...";
+      $("meta-text").textContent = "正在通过后端 API 触发 pytest 运行，请稍候（依赖后端已正确配置测试环境）。";
+
+      try {
+        const resp = await fetch(API_BASE + "/test/run", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            modules: state.selectedModules,
+            includePerformance: state.includePerformance
+          })
+        });
+        const json = await resp.json();
+        if (resp.ok && json && json.data) {
+          const data = json.data;
+          state.summary = data;
+          state.modules = data.modules || [];
+
+          const totalCases = data.totalCases || 0;
+          const totalPassed = data.totalPassed || 0;
+          const totalFailed = data.totalFailed || 0;
+          const totalSkipped = data.totalSkipped || 0;
+          const exitCode = data.exitCode;
+          const totalPassRate = totalCases ? (totalPassed / totalCases) * 100 : 0;
+
+          $("total-cases").textContent = String(totalCases);
+          $("pass-fail-skip").textContent = `${totalPassed} / ${totalFailed} / ${totalSkipped}`;
+          $("total-pass-rate").textContent = totalCases ? totalPassRate.toFixed(1) + "%" : "-";
+          $("exit-code").textContent = typeof exitCode === "number" ? String(exitCode) : "-";
+          $("meta-text").textContent = resp.ok ? "测试已完成，下方展示了模块级别的完成度、通过率和质量指数。" : (json.message || "测试执行完成，但存在错误。");
+
+          setStatus(totalCases ? totalPassRate : null);
+          renderModules(state.modules);
+          state.markdown = generateMarkdown(data);
+          $("report-area").value = state.markdown;
+        } else {
+          $("meta-text").textContent = json && json.message ? "测试执行失败：" + json.message : "测试执行失败，请检查后端日志。";
+        }
+      } catch (err) {
+        console.error(err);
+        $("meta-text").textContent = "调用测试 API 失败，请确认本页面能访问后端 /api/v1/test/run 接口。";
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = "开始测试";
+      }
+    }
+
+    function downloadReport() {
+      if (!state.markdown) {
+        alert("当前没有可导出的报告，请先运行一次测试。");
+        return;
+      }
+      const blob = new Blob([state.markdown], {type:"text/markdown;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[:T]/g,"-").slice(0,16);
+      a.href = url;
+      a.download = `测试报告_${ts}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyReport() {
+      if (!state.markdown) {
+        alert("当前没有可复制的报告，请先运行一次测试。");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(state.markdown);
+        alert("已复制到剪贴板");
+      } catch (e) {
+        // 兼容不支持 clipboard 的环境
+        const ta = $("report-area");
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        alert("已复制到剪贴板");
+      }
+    }
+
+    function initControls() {
+      document.querySelectorAll(".tag[data-module]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const key = btn.getAttribute("data-module");
+          if (!key) return;
+          const idx = state.selectedModules.indexOf(key);
+          if (idx >= 0) {
+            if (state.selectedModules.length > 1) {
+              state.selectedModules.splice(idx, 1);
+              btn.classList.remove("active");
+            }
+          } else {
+            state.selectedModules.push(key);
+            btn.classList.add("active");
+          }
+        });
+      });
+      $("perf-checkbox").addEventListener("change", (e) => {
+        state.includePerformance = e.target.checked;
+      });
+      $("run-btn").addEventListener("click", runTests);
+      $("download-btn").addEventListener("click", downloadReport);
+      $("copy-btn").addEventListener("click", copyReport);
+    }
+
+    (function bootstrap() {
+      initControls();
+      renderModules([]);
+      setStatus(null);
+      $("report-area").value = "# 测试报告\n\n> 运行一次测试后，这里会自动生成完整的 Markdown 报告，可直接保存为 `测试报告.md`。";
+    })();
+  </script>
+</body>
+</html>
+
+

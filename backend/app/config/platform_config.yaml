@@ -1,0 +1,69 @@
+platforms:
+  douyin:
+    name: "抖音"
+    code: "douyin"
+    title:
+      max_length: 30
+      emoji_enabled: true
+      tips: "标题需要吸引眼球,可使用emoji"
+    content:
+      max_length: 2000
+      paragraph_max_length: 500
+      tips: "正文第一段为钩子,吸引用户停留"
+    tags:
+      max_count: 5
+      format: "#{tag}"
+      tips: "标签需要与内容相关"
+    cover:
+      ratio: "9:16"
+      tips: "竖屏高清图片"
+    formatting:
+      paragraph_emojis: []
+    
+  xiaohongshu:
+    name: "小红书"
+    code: "xiaohongshu"
+    title:
+      max_length: 20
+      emoji_enabled: true
+      tips: "标题需要简洁有力"
+    content:
+      max_length: 1000
+      paragraph_max_length: 300
+      tips: "正文需要分段清晰,使用emoji分隔"
+    tags:
+      max_count: 10
+      format: "#{tag}"
+      tips: "标签需要覆盖主要关键词"
+    cover:
+      ratio: "3:4"
+      tips: "3:4比例高清图片"
+    formatting:
+      paragraph_emojis: ["📌", "✨", "💡", "🎯", "🔥", "💪"]
+    
+  wechat:
+    name: "微信视频号"
+    code: "wechat"
+    title:
+      max_length: 30
+      emoji_enabled: false
+      tips: "标题需要简洁明了"
+    content:
+      max_length: 200
+      paragraph_max_length: 200
+      tips: "描述需要概括内容要点"
+    tags:
+      max_count: 0
+      format: ""
+      tips: "不支持标签"
+    cover:
+      ratio: "16:9"
+      tips: "16:9比例高清图片"
+    formatting:
+      paragraph_emojis: []
+
+formatting_rules:
+  auto_paragraph: true
+  emoji_insertion: true
+  space_optimization: true
+  punctuation_optimization: true
