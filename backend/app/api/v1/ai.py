@@ -1,5 +1,7 @@
 import json
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from openai import AsyncOpenAI
@@ -144,7 +146,63 @@ async def generate_content(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"文案生成失败: {str(e)}")
+
+
+@router.post("/content/stream")
+async def generate_content_stream(req: ContentRequest):
+    """
+    SSE 流式文案生成 —— 逐字推送，前端可实时渲染
+    协议：Server-Sent Events (text/event-stream)
+    数据格式：data: {"content": "..."}\n\n
+    结束标志：data: [DONE]\n\n
+    """
+    # 构造 Prompt（复用 /content 接口的逻辑）
+    prompt = f"""
+    你是一位顶级的爆款文案写手。请为自媒体生成一篇脚本文案。
+    - 核心主题：{req.topic}
+    - 目标字数：约 {req.length} 字
+    - 语言风格：{req.style}
+    - 适配平台：{req.platform}
     
+    要求：
+    1. 排版清晰，段落分明。
+    2. 如果适配平台是短视频（如抖音、视频号），请包含【画面镜头】和【配音口播】的提示，方便直接作为脚本拍摄。
+    3. 如果适配平台是图文（如小红书），请合理使用 Emoji 表情符号，并提供合适的标题和话题 Tag。
+    4. 直接输出文案正文，不需要多余的问候语或解释说明。
+    """
+
+    async def event_generator():
+        try:
+            stream = await AI_CLIENT.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,
+                stream=True,  # 启用流式输出
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    # 按 SSE 协议格式推送每个 token
+                    data = json.dumps({"content": delta.content}, ensure_ascii=False)
+                    yield f"data: {data}\n\n"
+            # 发送结束信号
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_data = json.dumps({"error": str(e)}, ensure_ascii=False)
+            yield f"data: {error_data}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁止 Nginx 缓冲 SSE
+        },
+    )
+
+
 class EvaluateRequest(BaseModel):
     content: str
     topic: str
