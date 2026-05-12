@@ -16,6 +16,7 @@ from app.models.record import Record, Version
 from app.models.material import Material
 from app.models.tag import Tag
 from app.utils.response import success
+from app.core.redis_client import get_cache, set_cache
 
 router = APIRouter(prefix="/dashboard", tags=["仪表盘"])
 
@@ -34,6 +35,12 @@ async def get_stats(
     current_user: User = Depends(deps.get_current_active_user),
 ):
     """总素材数、创作数、AI 生成次数（版本数）、平台适配数（创作数）"""
+    # 尝试从缓存获取
+    cache_key = f"dashboard:stats:{current_user.id}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return success(data=cached, message="成功")
+
     materials_count = db.query(func.count(Material.id)).scalar() or 0
     records_count = db.query(Record).filter(Record.user_id == current_user.id).count()
     versions_count = (
@@ -43,15 +50,14 @@ async def get_stats(
         .scalar()
         or 0
     )
-    return success(
-        data={
-            "totalMaterials": materials_count,
-            "totalCreations": records_count,
-            "aiGenerations": versions_count,
-            "platformAdapts": records_count,
-        },
-        message="成功",
-    )
+    data = {
+        "totalMaterials": materials_count,
+        "totalCreations": records_count,
+        "aiGenerations": versions_count,
+        "platformAdapts": records_count,
+    }
+    await set_cache(cache_key, data, ttl=300)  # 缓存 5 分钟
+    return success(data=data, message="成功")
 
 
 @router.get("/trend")
@@ -175,6 +181,12 @@ async def get_tags(
     current_user: User = Depends(deps.get_current_active_user),
 ):
     """热门标签（来自标签表按 usage_count，或从创作内容提取关键词）"""
+    # 尝试从缓存获取
+    cache_key = f"dashboard:tags:{current_user.id}:{limit}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return success(data=cached, message="成功")
+
     tags = (
         db.query(Tag)
         .order_by(Tag.usage_count.desc())
@@ -187,6 +199,7 @@ async def get_tags(
             {"name": t.name, "type": types_[i % len(types_)]}
             for i, t in enumerate(tags)
         ]
+        await set_cache(cache_key, result, ttl=300)
         return success(data=result, message="成功")
 
     # 无标签时从最近记录中提取关键词

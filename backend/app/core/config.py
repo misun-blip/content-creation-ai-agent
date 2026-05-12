@@ -1,11 +1,8 @@
-from pathlib import Path
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List
 import os
 
-# 默认使用 MySQL 数据库（新团队开发环境）
-# 如需快速本地测试可切换为 SQLite：sqlite:///backend/test.db
-_default_sqlite_path = Path(__file__).resolve().parent.parent.parent / "test.db"
+# 默认数据库地址（MySQL 8.0，Docker 容器）
 _default_database_url = "mysql+pymysql://content_ai:content_ai_password@localhost:3306/content_ai_agent"
 
 
@@ -26,9 +23,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # AI服务配置（可选，平台适配模块不需要）
-    OPENAI_API_KEY: str = ""
-    OPENAI_API_BASE: str = "https://api.openai.com/v1"
+    # AI服务配置（统一使用 AI_API_KEY / AI_API_BASE）
     AI_API_KEY: str = ""
     AI_API_BASE: str = "https://api.chatanywhere.tech/v1"
     
@@ -54,41 +49,28 @@ class Settings(BaseSettings):
 try:
     settings = Settings()
 except Exception as e:
-    # 如果加载失败，尝试使用默认值创建（不读取.env文件）
     import logging
     logging.warning(f"加载配置文件失败，使用默认配置: {e}")
     try:
-        # 尝试不读取env文件
-        import os
-        # 临时移除.env文件要求
         settings = Settings(_env_file=None)
     except Exception as e2:
-        # 如果还是失败，创建一个最小配置对象
         logging.error(f"无法创建配置对象: {e2}")
-        # 如果还是失败，创建一个最小配置对象
-        logging.error(f"无法创建配置对象: {e2}")
-        # 创建一个简单的配置对象
         class MinimalSettings:
             APP_NAME = "内容创作AI-Agent"
             APP_VERSION = "1.0.0"
             DEBUG = True
-            DATABASE_URL = "mysql+pymysql://content_ai:content_ai_password@localhost:3306/content_ai_agent"
+            DATABASE_URL = _default_database_url
             REDIS_URL = "redis://localhost:6379/0"
             SECRET_KEY = "dev-secret-key-change-in-production"
             ALGORITHM = "HS256"
             ACCESS_TOKEN_EXPIRE_MINUTES = 30
-            OPENAI_API_KEY = ""
-            OPENAI_API_BASE = "https://api.openai.com/v1"
             AI_API_KEY = ""
             AI_API_BASE = "https://api.chatanywhere.tech/v1"
             CORS_ORIGINS = [
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://localhost:8000",
-                "http://localhost:8080",  # 测试HTML服务器
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:3003",
                 "http://127.0.0.1:5173",
-                "http://127.0.0.1:8080",  # 测试HTML服务器（备用地址）
             ]
         settings = MinimalSettings()
