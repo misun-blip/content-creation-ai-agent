@@ -10,6 +10,7 @@ from app.api import deps
 from app.models.material import Material as MaterialModel
 from app.models.tag import Tag, material_tags
 from app.utils.response import success
+from app.services.rag_service import get_rag_service
 
 router = APIRouter(prefix="/materials", tags=["素材库"])
 
@@ -146,6 +147,11 @@ def create_material(payload: MaterialCreate, db: Session = Depends(deps.get_db))
     db.add(item)
     db.commit()
     db.refresh(item)
+
+    # 同步到 ChromaDB 向量库（支持 RAG 语义检索）
+    rag = get_rag_service()
+    rag.add_material(item.id, item.title, item.description or "")
+
     return success(data=to_schema(item).model_dump())
 
 @router.put("/{material_id}")
@@ -170,6 +176,11 @@ def delete_material(material_id: int, db: Session = Depends(deps.get_db)):
 
     db.delete(item)
     db.commit()
+
+    # 同步清除 ChromaDB 向量
+    rag = get_rag_service()
+    rag.delete_material(material_id)
+
     return success(data={"deleted": 1}, message="删除成功")
 
 
