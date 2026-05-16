@@ -44,10 +44,21 @@
           搜索
         </el-button>
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleExport">
-          <el-icon><Download /></el-icon>
-          导出 CSV
-        </el-button>
+        <el-dropdown @command="handleExport" trigger="click">
+          <el-button type="success">
+            <el-icon><Download /></el-icon>
+            导出
+            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="csv">CSV</el-dropdown-item>
+              <el-dropdown-item command="txt">TXT</el-dropdown-item>
+              <el-dropdown-item command="docx">Word</el-dropdown-item>
+              <el-dropdown-item command="pdf">PDF</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="primary" plain @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           新建记录
@@ -291,8 +302,19 @@
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Search, Download, View, Delete, Plus, Clock } from "@element-plus/icons-vue";
-import request from "@/api/index";
+import { Search, Download, View, Delete, Plus, Clock, ArrowDown } from "@element-plus/icons-vue";
+import {
+  fetchRecords as apiFetchRecords,
+  createRecord,
+  getRecord,
+  updateRecord,
+  deleteRecord,
+  fetchVersions as apiFetchVersions,
+  createVersion,
+  restoreVersion,
+  exportRecords,
+} from "@/api/records";
+import { downloadBlob } from "@/utils/download";
 
 // ── 状态 ──────────────────────────────────────────────────────
 const loading = ref(false);
@@ -341,7 +363,7 @@ const fetchRecords = async () => {
       params.start_date = dateRange.value[0];
       params.end_date = dateRange.value[1];
     }
-    const res = await request.get("/api/v1/records/", { params });
+    const res = await apiFetchRecords(params);
     // 前端兜底：按 id 升序排列
     const items = res.data?.items || [];
     items.sort((a, b) => a.id - b.id);
@@ -355,7 +377,7 @@ const fetchRecords = async () => {
 };
 
 const fetchVersions = async (recordId) => {
-  const res = await request.get(`/api/v1/records/${recordId}/versions`);
+  const res = await apiFetchVersions(recordId);
   versions.value = res.data || [];
 };
 
@@ -374,7 +396,14 @@ const handleReset = () => {
 };
 
 // ── 导出 ──────────────────────────────────────────────────────
-const handleExport = async () => {
+const EXPORT_FORMATS = {
+  csv:  { extension: '.csv',  mimeType: 'text/csv' },
+  txt:  { extension: '.txt',  mimeType: 'text/plain' },
+  docx: { extension: '.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  pdf:  { extension: '.pdf',  mimeType: 'application/pdf' },
+};
+
+const handleExport = async (format) => {
   try {
     const params = {};
     if (searchQuery.value) params.keyword = searchQuery.value;
@@ -383,23 +412,14 @@ const handleExport = async () => {
       params.start_date = dateRange.value[0];
       params.end_date = dateRange.value[1];
     }
-    // 用 axios 请求，自动携带 Authorization header，返回二进制流
-    const res = await request.get("/api/v1/records/export/csv", {
-      params,
-      responseType: "blob",
-    });
+    const res = await exportRecords(format, params);
     // 从响应头取文件名，取不到则用默认名
     const disposition = res.headers?.["content-disposition"] || "";
     const match = disposition.match(/filename="?([^"]+)"?/);
-    const filename = match ? match[1] : `records_${Date.now()}.csv`;
-    // 创建临时链接触发下载
-    const blob = new Blob([res.data], { type: "text/csv;charset=utf-8-sig" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    const formatMeta = EXPORT_FORMATS[format] || EXPORT_FORMATS.csv;
+    const filename = match ? match[1] : `records_${Date.now()}${formatMeta.extension}`;
+    const blob = new Blob([res.data], { type: formatMeta.mimeType });
+    downloadBlob(blob, filename);
     ElMessage.success("导出成功");
   } catch (e) {
     ElMessage.error("导出失败，请稍后重试");
@@ -429,10 +449,10 @@ const submitRecord = async () => {
   submitting.value = true;
   try {
     if (editingRecord.value) {
-      await request.put(`/api/v1/records/${editingRecord.value.id}`, recordForm);
+      await updateRecord(editingRecord.value.id, recordForm);
       ElMessage.success("更新成功");
     } else {
-      await request.post("/api/v1/records/", recordForm);
+      await createRecord(recordForm);
       ElMessage.success("创建成功");
     }
     createDialogVisible.value = false;
@@ -444,7 +464,7 @@ const submitRecord = async () => {
 
 // ── 详情 ──────────────────────────────────────────────────────
 const openDetailDialog = async (row) => {
-  const res = await request.get(`/api/v1/records/${row.id}`);
+  const res = await getRecord(row.id);
   currentRecord.value = res.data;
   detailDialogVisible.value = true;
 };
@@ -466,7 +486,7 @@ const submitNewVersion = async () => {
   }
   submitting.value = true;
   try {
-    await request.post(`/api/v1/records/${currentRecord.value.id}/versions`, newVersionForm);
+    await createVersion(currentRecord.value.id, newVersionForm);
     ElMessage.success("版本保存成功");
     await fetchVersions(currentRecord.value.id);
     newVersionForm.content = "";
@@ -483,9 +503,7 @@ const handleRestore = async (version) => {
     "确认回滚",
     { type: "warning" }
   );
-  await request.post(
-    `/api/v1/records/${currentRecord.value.id}/versions/${version.id}/restore`
-  );
+  await restoreVersion(currentRecord.value.id, version.id);
   ElMessage.success("回滚成功");
   await fetchVersions(currentRecord.value.id);
   fetchRecords();
@@ -498,7 +516,7 @@ const handleDelete = async (row) => {
     "确认删除",
     { type: "warning", confirmButtonText: "删除", confirmButtonClass: "el-button--danger" }
   );
-  await request.delete(`/api/v1/records/${row.id}`);
+  await deleteRecord(row.id);
   ElMessage.success("删除成功");
   fetchRecords();
 };

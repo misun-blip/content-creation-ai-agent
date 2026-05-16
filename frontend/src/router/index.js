@@ -97,6 +97,15 @@ const routes = [
         },
       },
       {
+        path: "tags",
+        name: "TagManager",
+        component: () => import("@/views/tags/TagManager.vue"),
+        meta: {
+          title: "标签管理",
+          transition: "slide-left",
+        },
+      },
+      {
         path: "statistics",
         name: "Statistics",
         component: () => import("@/views/statistics/DailyStatistics.vue"),

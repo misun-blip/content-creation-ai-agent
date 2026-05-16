@@ -2,6 +2,8 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "path";
 
+/// <reference types="vitest" />
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd());
 
@@ -18,16 +20,20 @@ export default defineConfig(({ mode }) => {
         "@layouts": resolve(__dirname, "src/layouts"),
       },
     },
+    test: {
+      globals: true,
+      environment: "node",
+    },
     server: {
       port: parseInt(env.VITE_APP_PORT || "3000"),
       host: true,
       open: true,
       proxy: {
-        [env.VITE_APP_API_PREFIX || "/api"]: {
-          target: env.VITE_APP_API_BASE_URL || "http://localhost:8000",
-          changeOrigin: true,
-        },
-      },
+        "/api": {
+          target: "http://localhost:8000",
+          changeOrigin: true
+        }
+      }
     },
     build: {
       outDir: "dist",
