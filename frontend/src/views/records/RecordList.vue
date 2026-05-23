@@ -142,8 +142,10 @@
     <el-dialog
       v-model="createDialogVisible"
       :title="editingRecord ? '编辑记录' : '新建创作记录'"
-      width="600px"
+      :width="editingRecord ? '90%' : '600px'"
+      :fullscreen="editingRecord && isMobile"
       destroy-on-close
+      class="record-edit-dialog"
     >
       <el-form :model="recordForm" label-width="80px" :rules="recordRules" ref="recordFormRef">
         <el-form-item label="标题" prop="title">
@@ -157,13 +159,42 @@
             <el-option label="B站" value="bilibili" />
           </el-select>
         </el-form-item>
-        <el-form-item label="内容">
-          <el-input
-            v-model="recordForm.content"
-            type="textarea"
-            :rows="6"
-            placeholder="请输入创作内容"
-          />
+        <el-form-item label="内容" class="content-form-item">
+          <!-- 简单模式：新建时用小 textarea -->
+          <template v-if="!editingRecord">
+            <el-input
+              v-model="recordForm.content"
+              type="textarea"
+              :rows="6"
+              placeholder="请输入创作内容（支持 Markdown 格式）"
+            />
+          </template>
+          <!-- 编辑模式：左右分栏，左边编辑 + 右边 Markdown 预览 -->
+          <template v-else>
+            <div class="editor-toolbar">
+              <el-radio-group v-model="editViewMode" size="small">
+                <el-radio-button label="split">编辑 + 预览</el-radio-button>
+                <el-radio-button label="edit">纯编辑</el-radio-button>
+                <el-radio-button label="preview">纯预览</el-radio-button>
+              </el-radio-group>
+              <span class="word-count">字数：{{ recordForm.content ? recordForm.content.length : 0 }}</span>
+            </div>
+            <div class="md-editor-container" :class="'mode-' + editViewMode">
+              <div v-show="editViewMode !== 'preview'" class="md-editor-pane">
+                <el-input
+                  v-model="recordForm.content"
+                  type="textarea"
+                  :rows="20"
+                  placeholder="请输入创作内容（支持 Markdown 格式）"
+                  resize="none"
+                  class="md-textarea"
+                />
+              </div>
+              <div v-show="editViewMode !== 'edit'" class="md-preview-pane">
+                <div class="md-preview-content" v-html="renderedMarkdown"></div>
+              </div>
+            </div>
+          </template>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -300,9 +331,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Search, Download, View, Delete, Plus, Clock, ArrowDown } from "@element-plus/icons-vue";
+import { marked } from "marked";
 import {
   fetchRecords as apiFetchRecords,
   createRecord,
@@ -334,6 +366,35 @@ const detailDialogVisible = ref(false);
 const versionDialogVisible = ref(false);
 const currentRecord = ref(null);
 const editingRecord = ref(null);
+
+// 编辑视图模式和 Markdown 预览
+const editViewMode = ref("split");
+const isMobile = ref(window.innerWidth < 768);
+
+/**
+ * 预处理 Markdown 内容，修正 AI 生成的不规范格式：
+ * - 确保 ### 标题前有空行
+ * - 确保 --- 分隔线前后有空行
+ * - 确保 **加粗** 正常解析
+ */
+function preprocessMarkdown(text) {
+  if (!text) return "";
+  let result = text;
+  // 确保 --- 分隔线前后有空行
+  result = result.replace(/([^\n])---/g, "$1\n\n---");
+  result = result.replace(/---([^\n])/g, "---\n\n$1");
+  // 确保 # 标题前有空行（如果前面紧跟其他内容）
+  result = result.replace(/([^\n])(#{1,6}\s)/g, "$1\n\n$2");
+  // 确保【画面镜头】【配音口播】等标记前换行，方便阅读
+  result = result.replace(/([。！？\n])(\s*【)/g, "$1\n\n$2");
+  return result;
+}
+
+const renderedMarkdown = computed(() => {
+  if (!recordForm.content) return "<p style='color:#999'>预览区域</p>";
+  const processed = preprocessMarkdown(recordForm.content);
+  return marked(processed, { breaks: true });
+});
 
 // 表单
 const recordFormRef = ref(null);
@@ -710,5 +771,150 @@ onMounted(fetchRecords);
   .filter-content > * {
     width: 100% !important;
   }
+}
+
+/* ── Markdown 编辑器样式 ── */
+.content-form-item {
+  width: 100%;
+}
+
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.word-count {
+  font-size: 12px;
+  color: #909399;
+}
+
+.md-editor-container {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  min-height: 500px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.md-editor-container.mode-split .md-editor-pane,
+.md-editor-container.mode-split .md-preview-pane {
+  width: 50%;
+}
+
+.md-editor-container.mode-edit .md-editor-pane {
+  width: 100%;
+}
+
+.md-editor-container.mode-preview .md-preview-pane {
+  width: 100%;
+}
+
+.md-editor-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ebeef5;
+}
+
+.md-editor-pane :deep(.el-textarea) {
+  height: 100%;
+}
+
+.md-editor-pane :deep(.el-textarea__inner) {
+  height: 100% !important;
+  min-height: 500px;
+  border: none;
+  border-radius: 0;
+  resize: none;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px;
+}
+
+.md-preview-pane {
+  overflow-y: auto;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.md-preview-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #303133;
+}
+
+.md-preview-content :deep(h1) {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.md-preview-content :deep(h2) {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 14px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.md-preview-content :deep(h3) {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 12px 0 4px;
+}
+
+.md-preview-content :deep(p) {
+  margin: 8px 0;
+}
+
+.md-preview-content :deep(ul),
+.md-preview-content :deep(ol) {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.md-preview-content :deep(li) {
+  margin: 4px 0;
+}
+
+.md-preview-content :deep(hr) {
+  border: none;
+  border-top: 1px solid #dcdfe6;
+  margin: 16px 0;
+}
+
+.md-preview-content :deep(strong) {
+  font-weight: 700;
+  color: #303133;
+}
+
+.md-preview-content :deep(code) {
+  background: #f0f2f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: "Consolas", monospace;
+}
+
+.md-preview-content :deep(blockquote) {
+  border-left: 4px solid #409eff;
+  margin: 10px 0;
+  padding: 8px 16px;
+  background: #f4f7ff;
+  color: #606266;
+}
+
+/* 编辑对话框自适应 */
+:deep(.record-edit-dialog .el-dialog__body) {
+  padding: 16px 20px;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 </style>

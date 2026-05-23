@@ -36,14 +36,6 @@ export const getTypeStats = (params) => {
   });
 };
 
-export const getSummaryStats = (params) => {
-  return request({
-    url: '/api/v1/statistics/summary',
-    method: 'get',
-    params
-  });
-};
-
 // 总字数统计
 export const getTotalWords = (params) => {
   return request({

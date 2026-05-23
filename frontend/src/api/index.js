@@ -7,7 +7,7 @@ import router from "@/router";
 // 让浏览器直接请求 /api/...，再由 Vite 按 vite.config.js 中的 proxy 规则转发到后端。
 const request = axios.create({
   baseURL: "",
-  timeout: 10000,
+  timeout: 60000,
 });
 
 // 请求拦截器
