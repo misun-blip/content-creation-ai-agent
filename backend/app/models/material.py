@@ -13,7 +13,7 @@ class Material(Base):
     # 经过迁移后，materials 表已经将 content 重命名为 description
     description = Column(Text, nullable=False)
     # 新表结构中增加的字段：category/preview/upload_date
-    category = Column(String(50), nullable=False, default="default")
+    category = Column(String(50), nullable=False, default="default", index=True)
     preview = Column(String(1000), nullable=False, default="")
     file_path = Column(String(500), nullable=True)  # 文件存储路径
     upload_date = Column(Date, nullable=True)

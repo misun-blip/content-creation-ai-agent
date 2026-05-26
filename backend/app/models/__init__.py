@@ -5,3 +5,4 @@ from app.models.user import User        # noqa: F401
 from app.models.record import Record, Version  # noqa: F401
 from app.models.material import Material  # noqa: F401
 from app.models.tag import Tag, material_tags  # noqa: F401
+from app.models.category import Category  # noqa: F401

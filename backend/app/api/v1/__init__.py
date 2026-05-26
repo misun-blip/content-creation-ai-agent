@@ -10,6 +10,7 @@ from app.api.v1.adapter import router as adapter_router
 from app.api.v1.records import router as records_router
 from app.api.v1.uploads import router as uploads_router
 from app.api.v1.tags import router as tags_router
+from app.api.v1.categories import router as categories_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.test import router as test_router
 
@@ -20,6 +21,7 @@ api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["认证"])
 api_router.include_router(materials_router, tags=["素材管理"])
 api_router.include_router(tags_router, tags=["标签"])
+api_router.include_router(categories_router, tags=["分类"])
 api_router.include_router(ai_router, tags=["AI生成"])
 api_router.include_router(adapter_router, tags=["平台适配"])
 api_router.include_router(records_router, prefix="/records", tags=["创作记录"])
