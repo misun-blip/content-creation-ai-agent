@@ -167,7 +167,7 @@ import {
   DataAnalysis,
 } from "@element-plus/icons-vue";
 import request from "@/api/index";
-import { generateContent as apiGenerateContent, evaluateContent as apiEvaluateContent } from "@/api/ai";
+import { generateContent as apiGenerateContent, generateContentStream, evaluateContent as apiEvaluateContent } from "@/api/ai";
 import { useAdapterStore } from "@/stores/adapter";
 
 import { QuillEditor } from "@vueup/vue-quill";
@@ -271,42 +271,91 @@ const handleCopy = () => {
     });
 };
 
+// SSE 流式控制器引用（用于取消）
+let streamController = null;
+
 const handleGenerate = async () => {
   if (!formRef.value) return;
 
   await formRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true;
-      try {
-        const res = await apiGenerateContent({
+      generatedContent.value = "";
+      let rawText = "";
+
+      // 如果上次流还在进行，先取消
+      if (streamController) {
+        streamController.abort();
+        streamController = null;
+      }
+
+      streamController = generateContentStream(
+        {
           topic: generateForm.topic,
           length: generateForm.length,
           style: generateForm.style,
           platform: generateForm.platform,
-        });
-
-        if (res?.code === 200 && res?.data?.content != null) {
-          const rawText = res.data.content;
-          generatedContent.value = rawText
-            .split("\n")
-            .filter((line) => line.trim() !== "")
-            .map((line) => `<p>${line}</p>`)
-            .join("");
-          saveDraft();
-          ElMessage.success("文案初稿生成完毕，请查阅并编辑！");
-        } else {
-          ElMessage.error(res?.message || "后端返回错误");
+        },
+        {
+          onMessage(token) {
+            rawText += token;
+            // 实时将纯文本按段落转换为 HTML 渲染
+            generatedContent.value = rawText
+              .split("\n")
+              .filter((line) => line.trim() !== "")
+              .map((line) => `<p>${line}</p>`)
+              .join("");
+          },
+          onDone() {
+            loading.value = false;
+            streamController = null;
+            saveDraft();
+            ElMessage.success("文案生成完毕，请查阅并编辑！");
+          },
+          onError(err) {
+            loading.value = false;
+            streamController = null;
+            console.error("SSE Stream Error:", err);
+            // 流式失败时回退到一次性生成
+            handleGenerateFallback();
+          },
         }
-      } catch (error) {
-        console.error("API Error:", error);
-        ElMessage.error("接口请求失败，请检查后端服务是否正常");
-      } finally {
-        loading.value = false;
-      }
+      );
     } else {
       ElMessage.warning("请完善表单必填项");
     }
   });
+};
+
+// 回退方案：当 SSE 流式失败时使用一次性生成
+const handleGenerateFallback = async () => {
+  loading.value = true;
+  try {
+    const res = await apiGenerateContent({
+      topic: generateForm.topic,
+      length: generateForm.length,
+      style: generateForm.style,
+      platform: generateForm.platform,
+    });
+
+    if (res?.code === 200 && res?.data?.content != null) {
+      const rawText = res.data.content;
+      generatedContent.value = rawText
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => `<p>${line}</p>`)
+        .join("");
+      saveDraft();
+      ElMessage.success("文案初稿生成完毕，请查阅并编辑！");
+    } else {
+      ElMessage.error(res?.message || "后端返回错误");
+    }
+  } catch (error) {
+    console.error("API Error:", error);
+    ElMessage.error("接口请求失败，请检查后端服务是否正常");
+  } finally {
+    loading.value = false;
+  }
 };
 
 // 评估相关的响应式变量

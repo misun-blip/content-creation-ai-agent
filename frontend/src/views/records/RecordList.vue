@@ -44,10 +44,21 @@
           搜索
         </el-button>
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleExport">
-          <el-icon><Download /></el-icon>
-          导出 CSV
-        </el-button>
+        <el-dropdown @command="handleExport" trigger="click">
+          <el-button type="success">
+            <el-icon><Download /></el-icon>
+            导出
+            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="csv">CSV</el-dropdown-item>
+              <el-dropdown-item command="txt">TXT</el-dropdown-item>
+              <el-dropdown-item command="docx">Word</el-dropdown-item>
+              <el-dropdown-item command="pdf">PDF</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="primary" plain @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           新建记录
@@ -131,8 +142,10 @@
     <el-dialog
       v-model="createDialogVisible"
       :title="editingRecord ? '编辑记录' : '新建创作记录'"
-      width="600px"
+      :width="editingRecord ? '90%' : '600px'"
+      :fullscreen="editingRecord && isMobile"
       destroy-on-close
+      class="record-edit-dialog"
     >
       <el-form :model="recordForm" label-width="80px" :rules="recordRules" ref="recordFormRef">
         <el-form-item label="标题" prop="title">
@@ -146,13 +159,42 @@
             <el-option label="B站" value="bilibili" />
           </el-select>
         </el-form-item>
-        <el-form-item label="内容">
-          <el-input
-            v-model="recordForm.content"
-            type="textarea"
-            :rows="6"
-            placeholder="请输入创作内容"
-          />
+        <el-form-item label="内容" class="content-form-item">
+          <!-- 简单模式：新建时用小 textarea -->
+          <template v-if="!editingRecord">
+            <el-input
+              v-model="recordForm.content"
+              type="textarea"
+              :rows="6"
+              placeholder="请输入创作内容（支持 Markdown 格式）"
+            />
+          </template>
+          <!-- 编辑模式：左右分栏，左边编辑 + 右边 Markdown 预览 -->
+          <template v-else>
+            <div class="editor-toolbar">
+              <el-radio-group v-model="editViewMode" size="small">
+                <el-radio-button label="split">编辑 + 预览</el-radio-button>
+                <el-radio-button label="edit">纯编辑</el-radio-button>
+                <el-radio-button label="preview">纯预览</el-radio-button>
+              </el-radio-group>
+              <span class="word-count">字数：{{ recordForm.content ? recordForm.content.length : 0 }}</span>
+            </div>
+            <div class="md-editor-container" :class="'mode-' + editViewMode">
+              <div v-show="editViewMode !== 'preview'" class="md-editor-pane">
+                <el-input
+                  v-model="recordForm.content"
+                  type="textarea"
+                  :rows="20"
+                  placeholder="请输入创作内容（支持 Markdown 格式）"
+                  resize="none"
+                  class="md-textarea"
+                />
+              </div>
+              <div v-show="editViewMode !== 'edit'" class="md-preview-pane">
+                <div class="md-preview-content" v-html="renderedMarkdown"></div>
+              </div>
+            </div>
+          </template>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -289,10 +331,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Search, Download, View, Delete, Plus, Clock } from "@element-plus/icons-vue";
-import request from "@/api/index";
+import { Search, Download, View, Delete, Plus, Clock, ArrowDown } from "@element-plus/icons-vue";
+import { marked } from "marked";
+import {
+  fetchRecords as apiFetchRecords,
+  createRecord,
+  getRecord,
+  updateRecord,
+  deleteRecord,
+  fetchVersions as apiFetchVersions,
+  createVersion,
+  restoreVersion,
+  exportRecords,
+} from "@/api/records";
+import { downloadBlob } from "@/utils/download";
 
 // ── 状态 ──────────────────────────────────────────────────────
 const loading = ref(false);
@@ -312,6 +366,35 @@ const detailDialogVisible = ref(false);
 const versionDialogVisible = ref(false);
 const currentRecord = ref(null);
 const editingRecord = ref(null);
+
+// 编辑视图模式和 Markdown 预览
+const editViewMode = ref("split");
+const isMobile = ref(window.innerWidth < 768);
+
+/**
+ * 预处理 Markdown 内容，修正 AI 生成的不规范格式：
+ * - 确保 ### 标题前有空行
+ * - 确保 --- 分隔线前后有空行
+ * - 确保 **加粗** 正常解析
+ */
+function preprocessMarkdown(text) {
+  if (!text) return "";
+  let result = text;
+  // 确保 --- 分隔线前后有空行
+  result = result.replace(/([^\n])---/g, "$1\n\n---");
+  result = result.replace(/---([^\n])/g, "---\n\n$1");
+  // 确保 # 标题前有空行（如果前面紧跟其他内容）
+  result = result.replace(/([^\n])(#{1,6}\s)/g, "$1\n\n$2");
+  // 确保【画面镜头】【配音口播】等标记前换行，方便阅读
+  result = result.replace(/([。！？\n])(\s*【)/g, "$1\n\n$2");
+  return result;
+}
+
+const renderedMarkdown = computed(() => {
+  if (!recordForm.content) return "<p style='color:#999'>预览区域</p>";
+  const processed = preprocessMarkdown(recordForm.content);
+  return marked(processed, { breaks: true });
+});
 
 // 表单
 const recordFormRef = ref(null);
@@ -341,7 +424,7 @@ const fetchRecords = async () => {
       params.start_date = dateRange.value[0];
       params.end_date = dateRange.value[1];
     }
-    const res = await request.get("/api/v1/records/", { params });
+    const res = await apiFetchRecords(params);
     // 前端兜底：按 id 升序排列
     const items = res.data?.items || [];
     items.sort((a, b) => a.id - b.id);
@@ -355,7 +438,7 @@ const fetchRecords = async () => {
 };
 
 const fetchVersions = async (recordId) => {
-  const res = await request.get(`/api/v1/records/${recordId}/versions`);
+  const res = await apiFetchVersions(recordId);
   versions.value = res.data || [];
 };
 
@@ -374,7 +457,14 @@ const handleReset = () => {
 };
 
 // ── 导出 ──────────────────────────────────────────────────────
-const handleExport = async () => {
+const EXPORT_FORMATS = {
+  csv:  { extension: '.csv',  mimeType: 'text/csv' },
+  txt:  { extension: '.txt',  mimeType: 'text/plain' },
+  docx: { extension: '.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  pdf:  { extension: '.pdf',  mimeType: 'application/pdf' },
+};
+
+const handleExport = async (format) => {
   try {
     const params = {};
     if (searchQuery.value) params.keyword = searchQuery.value;
@@ -383,23 +473,14 @@ const handleExport = async () => {
       params.start_date = dateRange.value[0];
       params.end_date = dateRange.value[1];
     }
-    // 用 axios 请求，自动携带 Authorization header，返回二进制流
-    const res = await request.get("/api/v1/records/export/csv", {
-      params,
-      responseType: "blob",
-    });
+    const res = await exportRecords(format, params);
     // 从响应头取文件名，取不到则用默认名
     const disposition = res.headers?.["content-disposition"] || "";
     const match = disposition.match(/filename="?([^"]+)"?/);
-    const filename = match ? match[1] : `records_${Date.now()}.csv`;
-    // 创建临时链接触发下载
-    const blob = new Blob([res.data], { type: "text/csv;charset=utf-8-sig" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    const formatMeta = EXPORT_FORMATS[format] || EXPORT_FORMATS.csv;
+    const filename = match ? match[1] : `records_${Date.now()}${formatMeta.extension}`;
+    const blob = new Blob([res.data], { type: formatMeta.mimeType });
+    downloadBlob(blob, filename);
     ElMessage.success("导出成功");
   } catch (e) {
     ElMessage.error("导出失败，请稍后重试");
@@ -429,10 +510,10 @@ const submitRecord = async () => {
   submitting.value = true;
   try {
     if (editingRecord.value) {
-      await request.put(`/api/v1/records/${editingRecord.value.id}`, recordForm);
+      await updateRecord(editingRecord.value.id, recordForm);
       ElMessage.success("更新成功");
     } else {
-      await request.post("/api/v1/records/", recordForm);
+      await createRecord(recordForm);
       ElMessage.success("创建成功");
     }
     createDialogVisible.value = false;
@@ -444,7 +525,7 @@ const submitRecord = async () => {
 
 // ── 详情 ──────────────────────────────────────────────────────
 const openDetailDialog = async (row) => {
-  const res = await request.get(`/api/v1/records/${row.id}`);
+  const res = await getRecord(row.id);
   currentRecord.value = res.data;
   detailDialogVisible.value = true;
 };
@@ -466,7 +547,7 @@ const submitNewVersion = async () => {
   }
   submitting.value = true;
   try {
-    await request.post(`/api/v1/records/${currentRecord.value.id}/versions`, newVersionForm);
+    await createVersion(currentRecord.value.id, newVersionForm);
     ElMessage.success("版本保存成功");
     await fetchVersions(currentRecord.value.id);
     newVersionForm.content = "";
@@ -483,9 +564,7 @@ const handleRestore = async (version) => {
     "确认回滚",
     { type: "warning" }
   );
-  await request.post(
-    `/api/v1/records/${currentRecord.value.id}/versions/${version.id}/restore`
-  );
+  await restoreVersion(currentRecord.value.id, version.id);
   ElMessage.success("回滚成功");
   await fetchVersions(currentRecord.value.id);
   fetchRecords();
@@ -498,7 +577,7 @@ const handleDelete = async (row) => {
     "确认删除",
     { type: "warning", confirmButtonText: "删除", confirmButtonClass: "el-button--danger" }
   );
-  await request.delete(`/api/v1/records/${row.id}`);
+  await deleteRecord(row.id);
   ElMessage.success("删除成功");
   fetchRecords();
 };
@@ -692,5 +771,150 @@ onMounted(fetchRecords);
   .filter-content > * {
     width: 100% !important;
   }
+}
+
+/* ── Markdown 编辑器样式 ── */
+.content-form-item {
+  width: 100%;
+}
+
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.word-count {
+  font-size: 12px;
+  color: #909399;
+}
+
+.md-editor-container {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  min-height: 500px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.md-editor-container.mode-split .md-editor-pane,
+.md-editor-container.mode-split .md-preview-pane {
+  width: 50%;
+}
+
+.md-editor-container.mode-edit .md-editor-pane {
+  width: 100%;
+}
+
+.md-editor-container.mode-preview .md-preview-pane {
+  width: 100%;
+}
+
+.md-editor-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ebeef5;
+}
+
+.md-editor-pane :deep(.el-textarea) {
+  height: 100%;
+}
+
+.md-editor-pane :deep(.el-textarea__inner) {
+  height: 100% !important;
+  min-height: 500px;
+  border: none;
+  border-radius: 0;
+  resize: none;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px;
+}
+
+.md-preview-pane {
+  overflow-y: auto;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.md-preview-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #303133;
+}
+
+.md-preview-content :deep(h1) {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.md-preview-content :deep(h2) {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 14px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.md-preview-content :deep(h3) {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 12px 0 4px;
+}
+
+.md-preview-content :deep(p) {
+  margin: 8px 0;
+}
+
+.md-preview-content :deep(ul),
+.md-preview-content :deep(ol) {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.md-preview-content :deep(li) {
+  margin: 4px 0;
+}
+
+.md-preview-content :deep(hr) {
+  border: none;
+  border-top: 1px solid #dcdfe6;
+  margin: 16px 0;
+}
+
+.md-preview-content :deep(strong) {
+  font-weight: 700;
+  color: #303133;
+}
+
+.md-preview-content :deep(code) {
+  background: #f0f2f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: "Consolas", monospace;
+}
+
+.md-preview-content :deep(blockquote) {
+  border-left: 4px solid #409eff;
+  margin: 10px 0;
+  padding: 8px 16px;
+  background: #f4f7ff;
+  color: #606266;
+}
+
+/* 编辑对话框自适应 */
+:deep(.record-edit-dialog .el-dialog__body) {
+  padding: 16px 20px;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 </style>

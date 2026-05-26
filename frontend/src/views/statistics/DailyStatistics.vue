@@ -156,14 +156,9 @@ import * as echarts from 'echarts';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Download, Document, Calendar, Timer, TrendCharts } from '@element-plus/icons-vue';
-import request from '@/api/index';
+import { getDailyStats, getPlatformStats, getTypeStats, getKeywordStats, getTotalWords, getAvgTime, exportReport } from '@/api/statistics';
+import { downloadBlob } from '@/utils/download';
 import KeywordTable from '@/components/Statistics/KeywordTable.vue';
-
-// 对接后端真实接口（4个统计接口）
-const getDailyStats = (params) => request({ url: '/api/v1/statistics/daily', method: 'get', params });
-const getPlatformStats = (params) => request({ url: '/api/v1/statistics/platform', method: 'get', params });
-const getTypeStats = (params) => request({ url: '/api/v1/statistics/type', method: 'get', params });
-const getKeywordStats = (params) => request({ url: '/api/v1/statistics/keywords', method: 'get', params });
 
 // 响应式数据（全部基于真实记录）
 const timeRange = ref('month');
@@ -355,16 +350,19 @@ const fetchAllStats = async () => {
     const dailyRes = await getDailyStats(params);
     if (dailyRes && dailyRes.code === 200) {
       initCreationChart(dailyRes.data);
-      
-      // 2. 单独请求真实总字数
-      const wordCountRes = await request({
-        url: '/api/v1/statistics/total_words',
-        method: 'get',
-        params
-      });
+    }
+
+    // 2. 单独请求真实总字数
+    try {
+      const wordCountRes = await getTotalWords(params);
       if (wordCountRes && wordCountRes.code === 200) {
-        totalWords.value = wordCountRes.data; // 真实总字数
+        totalWords.value = wordCountRes.data;
+      } else {
+        totalWords.value = 0;
       }
+    } catch {
+      totalWords.value = 0;
+      ElMessage.error('获取总字数失败');
     }
 
     // 3. 平台分布（动态篇数）
@@ -386,13 +384,16 @@ const fetchAllStats = async () => {
     }
 
     // 6. 获取真实平均创作时长
-    const avgTimeRes = await request({
-      url: '/api/v1/statistics/avg_time',
-      method: 'get',
-      params
-    });
-    if (avgTimeRes && avgTimeRes.code === 200) {
-      avgCreationTime.value = avgTimeRes.data; // 实时平均时长
+    try {
+      const avgTimeRes = await getAvgTime(params);
+      if (avgTimeRes && avgTimeRes.code === 200) {
+        avgCreationTime.value = avgTimeRes.data;
+      } else {
+        avgCreationTime.value = 1;
+      }
+    } catch {
+      avgCreationTime.value = 1;
+      ElMessage.error('获取平均创作时长失败');
     }
 
     ElMessage.success('实时创作数据加载成功');
@@ -416,23 +417,12 @@ const handleExport = async () => {
       end_date: dateRange.value[1] || formatDate(new Date())
     };
 
-    // 调用后端导出接口
-    const response = await request({
-      url: '/api/v1/statistics/export_report',
-      method: 'get',
-      params,
-      responseType: 'blob' // 关键：告诉axios这是文件流
-    });
+    // 调用统计API导出接口
+    const response = await exportReport(params);
 
     // 触发浏览器下载
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `创作统计报告_${formatDate(new Date())}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
+    downloadBlob(blob, `创作统计报告_${formatDate(new Date())}.csv`);
 
     ElMessage.success('报告导出成功');
   } catch (error) {

@@ -36,10 +36,30 @@ export const getTypeStats = (params) => {
   });
 };
 
-export const getSummaryStats = (params) => {
+// 总字数统计
+export const getTotalWords = (params) => {
   return request({
-    url: '/api/v1/statistics/summary',
+    url: '/api/v1/statistics/total_words',
     method: 'get',
     params
+  });
+};
+
+// 平均创作时间
+export const getAvgTime = (params) => {
+  return request({
+    url: '/api/v1/statistics/avg_time',
+    method: 'get',
+    params
+  });
+};
+
+// 导出统计报告
+export const exportReport = (params) => {
+  return request({
+    url: '/api/v1/statistics/export_report',
+    method: 'get',
+    params,
+    responseType: 'blob'
   });
 };
