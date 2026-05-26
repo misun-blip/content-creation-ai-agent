@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Index
 from sqlalchemy import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -6,6 +6,9 @@ from app.core.database import Base
 
 class Record(Base):
     __tablename__ = "records"
+    __table_args__ = (
+        Index("ix_records_user_id_created_at", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

@@ -25,11 +25,8 @@ from app.core.config import settings
 from app.models.user import User  # noqa: F401
 from app.models.material import Material  # noqa: F401
 from app.models.record import Record  # noqa: F401
-from app.models.tag import Tag  # noqa: F401
-
-# 如果其他同事新增了 model，在此处追加 import：
-# from app.models.category import Category  # noqa: F401
-# from app.models.statistics import Statistics  # noqa: F401
+from app.models.tag import Tag, material_tags  # noqa: F401
+from app.models.category import Category  # noqa: F401
 
 target_metadata = Base.metadata
 
