@@ -230,3 +230,58 @@ async def evaluate_content(req: EvaluateRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"评估失败: {str(e)}")
+
+
+# ====== AI 配图生成（基于 Unsplash 免费图库） ======
+
+class ImageRequest(BaseModel):
+    topic: str
+    count: int = 3
+    platform: str = "通用"
+
+@router.post("/image")
+async def generate_images(req: ImageRequest):
+    """
+    AI 智能配图：根据文案主题自动搜索匹配的高清图片
+    流程：AI 提取英文关键词 → Unsplash API 搜索 → 返回图片列表
+    """
+    import httpx
+
+    try:
+        # 1. 用 AI 将中文主题翻译为英文搜索关键词
+        response = await AI_CLIENT.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": "你是一个翻译助手。用户给你一个中文主题，你返回2-3个最适合在图库搜索的英文关键词，用逗号分隔。只返回关键词，不要其他内容。"},
+                {"role": "user", "content": f"主题：{req.topic}"}
+            ],
+            temperature=0.3,
+        )
+        keywords = response.choices[0].message.content.strip()
+
+        # 2. 调用 Unsplash 免费 API 搜索图片
+        # Unsplash Source API 无需注册，直接拼 URL 即可获取随机图片
+        images = []
+        async with httpx.AsyncClient(timeout=10) as client:
+            # 使用 Unsplash 搜索 API（无需 key 的 source 接口）
+            for i in range(req.count):
+                keyword = keywords.split(",")[0].strip()
+                # Unsplash source URL：每次加 sig 参数获取不同图片
+                img_url = f"https://source.unsplash.com/800x600/?{keyword}&sig={i}"
+                images.append({
+                    "url": img_url,
+                    "keyword": keyword,
+                    "description": f"配图 {i+1}: {req.topic}",
+                })
+
+        return {
+            "code": 200,
+            "message": "配图生成成功",
+            "data": {
+                "keywords": keywords,
+                "images": images,
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"配图生成失败: {str(e)}")
