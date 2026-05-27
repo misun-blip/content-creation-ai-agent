@@ -1,0 +1,545 @@
+{
+  "info": {
+    "name": "内容创作 AI-Agent API 测试集合",
+    "description": "覆盖认证、素材 CRUD、AI 生成、仪表盘四大模块的接口测试集合",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "content-creation-ai-agent-v1"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string" },
+    { "key": "materialId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🔐 认证模块",
+      "item": [
+        {
+          "name": "注册新用户",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser_001\",\n  \"password\": \"Test@12345\",\n  \"email\": \"testuser001@example.com\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 code=200', () => pm.expect(body.code).to.eql(200));",
+                  "pm.test('注册成功消息', () => pm.expect(body.message).to.include('注册成功'));",
+                  "pm.test('返回用户 id', () => pm.expect(body.data.id).to.be.a('number'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "用户登录（自动保存 token）",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser_001\",\n  \"password\": \"Test@12345\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 code=200', () => pm.expect(body.code).to.eql(200));",
+                  "pm.test('返回 token 字符串', () => pm.expect(body.data.token).to.be.a('string'));",
+                  "pm.collectionVariables.set('authToken', body.data.token);",
+                  "console.log('Token 已保存:', body.data.token.substring(0, 20) + '...');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取当前用户信息",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/me", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 code=200', () => pm.expect(body.code).to.eql(200));",
+                  "pm.test('包含 username 字段', () => pm.expect(body.data.username).to.be.a('string'));",
+                  "pm.test('包含 email 字段', () => pm.expect(body.data.email).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "未携带 Token 访问（应返回 401）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/me", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('无 Token 返回 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "修改密码",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/password", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","password"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"Test@12345\",\n  \"new_password\": \"Test@67890\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('密码修改成功', () => pm.expect(pm.response.json().code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "错误密码登录（应返回 401）",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser_001\",\n  \"password\": \"wrong_password\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('错误密码返回 401', () => pm.response.to.have.status(401));",
+                  "pm.test('错误消息正确', () => pm.expect(pm.response.json().message).to.include('密码'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📁 素材管理",
+      "item": [
+        {
+          "name": "获取素材列表",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/materials",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","materials"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回数组格式', () => pm.expect(body.data).to.be.an('array'));",
+                  "if (body.data.length > 0) {",
+                  "  pm.collectionVariables.set('materialId', body.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "关键字搜索素材",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/materials?q=测试",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","materials"],
+              "query": [{ "key": "q", "value": "测试" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('返回数组格式', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "创建新素材",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/materials", "host": ["{{baseUrl}}"], "path": ["api","v1","materials"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman 测试素材\",\n  \"description\": \"这是通过 Postman 创建的测试素材内容\",\n  \"category\": \"测试分类\",\n  \"preview\": \"/uploads/preview.jpg\",\n  \"type\": \"template\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回创建的素材 id', () => pm.expect(body.data.id).to.be.a('number'));",
+                  "pm.test('标题匹配', () => pm.expect(body.data.title).to.eql('Postman 测试素材'));",
+                  "pm.collectionVariables.set('materialId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "更新素材",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/materials/{{materialId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","materials","{{materialId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman 测试素材（已更新）\",\n  \"description\": \"更新后的描述内容\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('标题已更新', () => pm.expect(pm.response.json().data.title).to.include('已更新'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取素材分类列表",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/materials/categories", "host": ["{{baseUrl}}"], "path": ["api","v1","materials","categories"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('返回数组', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "删除素材",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/materials/{{materialId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","materials","{{materialId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('删除成功', () => pm.expect(pm.response.json().data.deleted).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🤖 AI 生成",
+      "item": [
+        {
+          "name": "生成营销选题",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/ai/topics", "host": ["{{baseUrl}}"], "path": ["api","v1","ai","topics"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keywords\": \"美食,探店\",\n  \"industry\": \"餐饮\",\n  \"platform\": \"xiaohongshu\",\n  \"count\": 3\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 code=200', () => pm.expect(body.code).to.eql(200));",
+                  "pm.test('topics 是数组', () => pm.expect(body.data.topics).to.be.an('array'));",
+                  "if (body.data.topics.length > 0) {",
+                  "  pm.test('每个选题含 title', () => pm.expect(body.data.topics[0].title).to.be.a('string'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "生成脚本文案",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/ai/content", "host": ["{{baseUrl}}"], "path": ["api","v1","ai","content"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"春日咖啡探店\",\n  \"length\": 300,\n  \"style\": \"活泼\",\n  \"platform\": \"xiaohongshu\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 code=200', () => pm.expect(body.code).to.eql(200));",
+                  "pm.test('content 是字符串', () => pm.expect(body.data.content).to.be.a('string'));",
+                  "pm.test('content 不为空', () => pm.expect(body.data.content.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "内容质量评估",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/v1/ai/evaluate", "host": ["{{baseUrl}}"], "path": ["api","v1","ai","evaluate"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"这是一篇测试文案，内容丰富，春日咖啡探店，带你发现城市里的温柔角落。\",\n  \"topic\": \"春日咖啡探店\",\n  \"target_length\": 50\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('返回 score', () => pm.expect(body.data.score).to.be.a('number'));",
+                  "pm.test('score 在 0-100 之间', () => { pm.expect(body.data.score).to.be.at.least(0); pm.expect(body.data.score).to.be.at.most(100); });",
+                  "pm.test('返回 suggestions 数组', () => pm.expect(body.data.suggestions).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📊 仪表盘",
+      "item": [
+        {
+          "name": "获取统计数据",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/dashboard/stats", "host": ["{{baseUrl}}"], "path": ["api","v1","dashboard","stats"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('包含 totalMaterials', () => pm.expect(body.data).to.have.property('totalMaterials'));",
+                  "pm.test('包含 totalCreations', () => pm.expect(body.data).to.have.property('totalCreations'));",
+                  "pm.test('包含 aiGenerations', () => pm.expect(body.data).to.have.property('aiGenerations'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取创作趋势",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/trend?months=6",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","dashboard","trend"],
+              "query": [{ "key": "months", "value": "6" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('包含 xAxis', () => pm.expect(body.data.xAxis).to.be.an('array'));",
+                  "pm.test('包含 data', () => pm.expect(body.data.data).to.be.an('array'));",
+                  "pm.test('xAxis 长度为 6', () => pm.expect(body.data.xAxis.length).to.eql(6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取平台分布",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/dashboard/platform", "host": ["{{baseUrl}}"], "path": ["api","v1","dashboard","platform"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('返回数组格式', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取最近活动",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/activities?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","dashboard","activities"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('返回数组格式', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "获取热门标签",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/dashboard/tags", "host": ["{{baseUrl}}"], "path": ["api","v1","dashboard","tags"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('返回数组格式', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🏥 健康检查",
+      "item": [
+        {
+          "name": "健康检查",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('状态码为 200', () => pm.response.to.have.status(200));",
+                  "pm.test('状态为 healthy', () => pm.expect(pm.response.json().status).to.eql('healthy'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
