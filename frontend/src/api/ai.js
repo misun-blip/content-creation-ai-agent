@@ -99,3 +99,11 @@ export function generateContentStream(data, { onMessage, onDone, onError }) {
 export function evaluateContent(data) {
   return request.post("/api/v1/ai/evaluate", data);
 }
+
+/**
+ * AI 智能配图
+ * @param {{ topic: string, count?: number, platform?: string }} data
+ */
+export function generateImages(data) {
+  return request.post("/api/v1/ai/image", data);
+}

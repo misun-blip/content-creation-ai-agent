@@ -111,6 +111,10 @@
               <el-icon><Platform /></el-icon>
               去排版适配
             </el-button>
+            <el-button size="small" type="primary" :loading="generateImageLoading" @click="handleGenerateImage">
+              <el-icon><Picture /></el-icon>
+              AI 智能配图
+            </el-button>
           </div>
         </div>
       </template>
@@ -126,6 +130,29 @@
 
       <div class="content-stats">
         <span>当前字数：约 {{ plainTextLength }} 字</span>
+      </div>
+
+      <!-- AI 配图展示区 -->
+      <div v-if="generatedImages.length > 0" class="image-gallery-wrap">
+        <el-divider>✨ 智能配图结果</el-divider>
+        <p class="image-tips">提取关键词: <strong>{{ generatedKeywords }}</strong> (点击查看大图或右键保存)</p>
+        <el-row :gutter="20">
+          <el-col :span="8" v-for="(img, index) in generatedImages" :key="index">
+            <el-card shadow="hover" :body-style="{ padding: '0px' }" class="image-card">
+              <el-image 
+                :src="img.url" 
+                fit="cover" 
+                class="ai-image"
+                :preview-src-list="generatedImages.map(i => i.url)"
+                :initial-index="index"
+              >
+                <template #placeholder>
+                  <div class="image-slot">加载中...</div>
+                </template>
+              </el-image>
+            </el-card>
+          </el-col>
+        </el-row>
       </div>
     </el-card>
     <el-dialog v-model="dialogVisible" title="文案质量评估报告" width="500px" class="evaluate-dialog">
@@ -165,9 +192,10 @@ import {
   Platform,
   DocumentAdd,
   DataAnalysis,
+  Picture
 } from "@element-plus/icons-vue";
 import request from "@/api/index";
-import { generateContent as apiGenerateContent, generateContentStream, evaluateContent as apiEvaluateContent } from "@/api/ai";
+import { generateContent as apiGenerateContent, generateContentStream, evaluateContent as apiEvaluateContent, generateImages } from "@/api/ai";
 import { useAdapterStore } from "@/stores/adapter";
 
 import { QuillEditor } from "@vueup/vue-quill";
@@ -438,6 +466,38 @@ const handleAdapt = () => {
   adapterStore.setOriginalContent(plainText);
   router.push("/adapter");
 };
+
+// AI 智能配图逻辑
+const generateImageLoading = ref(false);
+const generatedImages = ref([]);
+const generatedKeywords = ref("");
+
+const handleGenerateImage = async () => {
+  if (!generateForm.topic?.trim()) {
+    ElMessage.warning("请先输入文案主题或标题！");
+    return;
+  }
+  generateImageLoading.value = true;
+  try {
+    const res = await generateImages({
+      topic: generateForm.topic,
+      count: 3,
+      platform: generateForm.platform || "general"
+    });
+    if (res?.code === 200 && res?.data?.images) {
+      generatedImages.value = res.data.images;
+      generatedKeywords.value = res.data.keywords;
+      ElMessage.success("配图生成成功！");
+    } else {
+      ElMessage.error(res?.message || "配图生成失败");
+    }
+  } catch (error) {
+    console.error("Generate Image Error:", error);
+    ElMessage.error("请求失败，请稍后重试");
+  } finally {
+    generateImageLoading.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -537,6 +597,38 @@ const handleAdapt = () => {
   font-size: 14px;
   color: #909399;
   text-align: right;
+}
+.image-gallery-wrap {
+  margin-top: 30px;
+}
+.image-tips {
+  text-align: center;
+  color: #606266;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.image-card {
+  border-radius: 8px;
+  overflow: hidden;
+  height: 220px;
+  border: none;
+  background-color: #f5f7fa;
+}
+.ai-image {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s;
+}
+.ai-image:hover {
+  transform: scale(1.05);
+}
+.image-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background: #f5f7fa;
+  color: #909399;
 }
 @media (max-width: 768px) {
   .content-generate {
