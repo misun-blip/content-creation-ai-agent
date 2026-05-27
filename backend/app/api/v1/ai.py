@@ -232,7 +232,7 @@ async def evaluate_content(req: EvaluateRequest):
         raise HTTPException(status_code=500, detail=f"评估失败: {str(e)}")
 
 
-# ====== AI 配图生成（基于 Unsplash 免费图库） ======
+# ====== AI 配图生成（基于 Pollinations 免费 AI 生图 API） ======
 
 class ImageRequest(BaseModel):
     topic: str
@@ -242,43 +242,39 @@ class ImageRequest(BaseModel):
 @router.post("/image")
 async def generate_images(req: ImageRequest):
     """
-    AI 智能配图：根据文案主题自动搜索匹配的高清图片
-    流程：AI 提取英文关键词 → Unsplash API 搜索 → 返回图片列表
+    AI 智能配图：根据文案主题自动生成匹配的高清图片
+    流程：AI 提取英文提示词(Prompt) → 调用 Pollinations AI 绘图接口 → 返回图片列表
     """
-    import httpx
-
     try:
-        # 1. 用 AI 将中文主题翻译为英文搜索关键词
+        # 1. 用 AI 将中文主题翻译为英文绘图提示词
         response = await AI_CLIENT.chat.completions.create(
             model=CHAT_MODEL,
             messages=[
-                {"role": "system", "content": "你是一个翻译助手。用户给你一个中文主题，你返回2-3个最适合在图库搜索的英文关键词，用逗号分隔。只返回关键词，不要其他内容。"},
-                {"role": "user", "content": f"主题：{req.topic}"}
+                {"role": "system", "content": "你是一个资深的AI绘画提示词专家。用户会提供一个中文文案主题，请你输出一段高度概括、富有美感的英文绘画提示词(Prompt)，用于生成高质量配图。只返回一小段英文Prompt（不要超过20个词），不要有任何其他解释。"},
+                {"role": "user", "content": f"文案主题：{req.topic}"}
             ],
-            temperature=0.3,
+            temperature=0.5,
         )
-        keywords = response.choices[0].message.content.strip()
+        prompt = response.choices[0].message.content.strip()
 
-        # 2. 调用 Unsplash 免费 API 搜索图片
-        # Unsplash Source API 无需注册，直接拼 URL 即可获取随机图片
+        # 2. 调用 Pollinations 免费 API 生成图片
+        import urllib.parse
+        encoded_prompt = urllib.parse.quote(prompt)
         images = []
-        async with httpx.AsyncClient(timeout=10) as client:
-            # 使用 Unsplash 搜索 API（无需 key 的 source 接口）
-            for i in range(req.count):
-                keyword = keywords.split(",")[0].strip()
-                # Unsplash source URL：每次加 sig 参数获取不同图片
-                img_url = f"https://source.unsplash.com/800x600/?{keyword}&sig={i}"
-                images.append({
-                    "url": img_url,
-                    "keyword": keyword,
-                    "description": f"配图 {i+1}: {req.topic}",
-                })
+        for i in range(req.count):
+            # pollinations.ai 可以通过不同 seed 直接生成不同图片，nologo 隐藏水印
+            img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true&seed={i+10}"
+            images.append({
+                "url": img_url,
+                "keyword": prompt,
+                "description": f"配图 {i+1}: {req.topic}",
+            })
 
         return {
             "code": 200,
             "message": "配图生成成功",
             "data": {
-                "keywords": keywords,
+                "keywords": prompt,
                 "images": images,
             }
         }
