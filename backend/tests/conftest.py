@@ -133,8 +133,8 @@ def mock_ai_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_create(*args: Any, **kwargs: Any) -> Any:
         # 根据调用类型返回不同内容：topics 要求 JSON；content 返回纯文本即可
         msgs = (kwargs.get("messages") or [])
-        prompt = (msgs[0].get("content") if msgs and isinstance(msgs[0], dict) else "") or ""
-        if "topics" in prompt or "选题" in prompt:
+        prompt = (msgs[-1].get("content") if msgs and isinstance(msgs[-1], dict) else "") or ""
+        if "topics" in prompt or "选题" in prompt or "JSON" in prompt:
             return _Resp('{"topics":[{"title":"春日旅行","description":"关于春天出游的短视频创意"}]}')
         return _Resp("这是生成的文案内容。")
 
