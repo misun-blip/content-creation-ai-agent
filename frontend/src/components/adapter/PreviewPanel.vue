@@ -134,6 +134,34 @@
           {{ adaptedResult.preview }}
         </div>
       </div>
+      
+      <el-divider v-if="originalImages && originalImages.length > 0" />
+
+      <div v-if="originalImages && originalImages.length > 0" class="preview-section">
+        <div class="preview-title">
+          <el-icon><Picture /></el-icon>
+          <span class="label">附带配图 (AI 生成或知识库素材)</span>
+        </div>
+        <div class="image-gallery">
+          <el-row :gutter="10">
+            <el-col :span="8" v-for="(img, index) in originalImages" :key="index">
+              <el-card shadow="hover" :body-style="{ padding: '0px' }" class="image-card">
+                <el-image 
+                  :src="img.url" 
+                  fit="cover" 
+                  class="preview-image"
+                  :preview-src-list="originalImages.map(i => i.url)"
+                  :initial-index="index"
+                >
+                  <template #placeholder>
+                    <div class="image-slot">加载中...</div>
+                  </template>
+                </el-image>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+      </div>
     </div>
     
     <el-empty 
@@ -164,12 +192,14 @@ import {
   View,
   ArrowDown,
   DataAnalysis,
-  Monitor
+  Monitor,
+  Picture
 } from '@element-plus/icons-vue';
 
 const adapterStore = useAdapterStore();
 
 const adaptedResult = computed(() => adapterStore.adaptedResult);
+const originalImages = computed(() => adapterStore.originalImages);
 
 const handleCopy = () => {
   if (!adaptedResult.value) return;
@@ -376,6 +406,34 @@ const handleExport = (format) => {
 
 .empty-tip {
   color: #c0c4cc;
+  font-size: 13px;
+}
+
+.image-gallery {
+  margin-top: 10px;
+}
+.image-card {
+  border-radius: 6px;
+  overflow: hidden;
+  height: 150px;
+  border: none;
+  background-color: #f5f7fa;
+}
+.preview-image {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s;
+}
+.preview-image:hover {
+  transform: scale(1.05);
+}
+.image-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background: #f5f7fa;
+  color: #909399;
   font-size: 13px;
 }
 

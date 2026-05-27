@@ -12,6 +12,8 @@ export const useAdapterStore = defineStore('adapter', {
     selectedPlatform: 'douyin',
     // 原始内容
     originalContent: '',
+    // 原始配图
+    originalImages: [],
     // 适配结果
     adaptedResult: null,
     // 加载状态
@@ -169,6 +171,14 @@ export const useAdapterStore = defineStore('adapter', {
      */
     setOriginalContent(content) {
       this.originalContent = content;
+    },
+
+    /**
+     * 设置配图列表
+     * @param {Array} images - 配图列表
+     */
+    setOriginalImages(images) {
+      this.originalImages = images || [];
     },
 
     /**

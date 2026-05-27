@@ -464,6 +464,8 @@ const handleAdapt = () => {
         .trim()
     : "";
   adapterStore.setOriginalContent(plainText);
+  // 把生成的配图一并传过去
+  adapterStore.setOriginalImages(generatedImages.value);
   router.push("/adapter");
 };
 
