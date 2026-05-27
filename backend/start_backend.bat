@@ -10,6 +10,18 @@ echo ========================================
 echo.
 
 echo [1/4] 启动基础依赖 (MySQL/Redis) ...
+docker info >nul 2>&1
+if errorlevel 1 (
+    echo [提示] 未检测到 Docker 运行，尝试自动启动 Docker Desktop...
+    if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
+        start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        echo [等待] 等待 Docker Desktop 启动 (约 15 秒)...
+        timeout /t 15 /nobreak >nul
+    ) else (
+        echo [警告] 未找到 Docker Desktop 默认安装路径，请手动开启。
+    )
+)
+
 docker-compose -f "../docker-compose.yml" up -d mysql redis
 if errorlevel 1 (
     echo [警告] 尝试启动 Docker 服务失败，如果本机已安装 MySQL/Redis 则可继续。
