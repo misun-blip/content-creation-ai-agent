@@ -232,7 +232,7 @@ async def evaluate_content(req: EvaluateRequest):
         raise HTTPException(status_code=500, detail=f"评估失败: {str(e)}")
 
 
-# ====== AI 配图生成（基于 Pollinations 免费 AI 生图 API） ======
+# ====== AI 配图生成（基于 LoremFlickr 免费图库） ======
 
 class ImageRequest(BaseModel):
     topic: str
@@ -242,31 +242,35 @@ class ImageRequest(BaseModel):
 @router.post("/image")
 async def generate_images(req: ImageRequest):
     """
-    AI 智能配图：根据文案主题自动生成匹配的高清图片
-    流程：AI 提取英文提示词(Prompt) → 调用 Pollinations AI 绘图接口 → 返回图片列表
+    AI 智能配图：根据文案主题自动搜索匹配的高清图片
+    流程：AI 提取英文关键词 → LoremFlickr 免费 API 获取图片 → 返回图片列表
     """
+    import urllib.parse
+    
     try:
-        # 1. 用 AI 将中文主题翻译为英文绘图提示词
+        # 1. 用 AI 将中文主题翻译为英文搜索关键词
         response = await AI_CLIENT.chat.completions.create(
             model=CHAT_MODEL,
             messages=[
-                {"role": "system", "content": "你是一个资深的AI绘画提示词专家。用户会提供一个中文文案主题，请你输出一段高度概括、富有美感的英文绘画提示词(Prompt)，用于生成高质量配图。只返回一小段英文Prompt（不要超过20个词），不要有任何其他解释。"},
-                {"role": "user", "content": f"文案主题：{req.topic}"}
+                {"role": "system", "content": "你是一个翻译助手。用户给你一个中文主题，你返回1-2个最适合在图库搜索的英文关键词，用逗号分隔。只返回关键词，不要其他内容。例如用户输入'秋天咖啡馆'，你返回'autumn,cafe'"},
+                {"role": "user", "content": f"主题：{req.topic}"}
             ],
-            temperature=0.5,
+            temperature=0.3,
         )
-        prompt = response.choices[0].message.content.strip()
+        keywords = response.choices[0].message.content.strip()
 
-        # 2. 调用 Pollinations 免费 API 生成图片
-        import urllib.parse
-        encoded_prompt = urllib.parse.quote(prompt)
+        # 2. 调用 LoremFlickr 免费 API 搜索图片
         images = []
+        # 将逗号分隔的关键词转换为 LoremFlickr 接受的逗号分隔格式（URL Encode）
+        safe_keywords = urllib.parse.quote(keywords)
+        
         for i in range(req.count):
-            # pollinations.ai 可以通过不同 seed 直接生成不同图片，nologo 隐藏水印
-            img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true&seed={i+10}"
+            # LoremFlickr 接口：https://loremflickr.com/宽/高/关键词?lock=随机种子
+            # 使用 lock 参数确保每次生成的图片不同且固定
+            img_url = f"https://loremflickr.com/800/600/{safe_keywords}?lock={i+10}"
             images.append({
                 "url": img_url,
-                "keyword": prompt,
+                "keyword": keywords,
                 "description": f"配图 {i+1}: {req.topic}",
             })
 
@@ -274,7 +278,7 @@ async def generate_images(req: ImageRequest):
             "code": 200,
             "message": "配图生成成功",
             "data": {
-                "keywords": prompt,
+                "keywords": keywords,
                 "images": images,
             }
         }
