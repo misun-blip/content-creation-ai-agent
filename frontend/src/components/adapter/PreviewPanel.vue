@@ -128,38 +128,34 @@
       <div class="preview-section">
         <div class="preview-title">
           <el-icon><View /></el-icon>
-          <span class="label">完整预览</span>
+          <span class="label">完整预览 (模拟图文混排)</span>
         </div>
         <div class="preview-value preview-full">
-          {{ adaptedResult.preview }}
-        </div>
-      </div>
-      
-      <el-divider v-if="originalImages && originalImages.length > 0" />
-
-      <div v-if="originalImages && originalImages.length > 0" class="preview-section">
-        <div class="preview-title">
-          <el-icon><Picture /></el-icon>
-          <span class="label">附带配图 (AI 生成或知识库素材)</span>
-        </div>
-        <div class="image-gallery">
-          <el-row :gutter="10">
-            <el-col :span="8" v-for="(img, index) in originalImages" :key="index">
-              <el-card shadow="hover" :body-style="{ padding: '0px' }" class="image-card">
-                <el-image 
-                  :src="img.url" 
-                  fit="cover" 
-                  class="preview-image"
-                  :preview-src-list="originalImages.map(i => i.url)"
-                  :initial-index="index"
-                >
-                  <template #placeholder>
-                    <div class="image-slot">加载中...</div>
-                  </template>
-                </el-image>
-              </el-card>
-            </el-col>
-          </el-row>
+          <!-- 轮播图展示区 (模拟小红书/抖音等图文展示) -->
+          <div v-if="originalImages && originalImages.length > 0" class="preview-carousel-wrap">
+            <el-carousel :interval="4000" type="card" height="200px" indicator-position="outside">
+              <el-carousel-item v-for="(img, index) in originalImages" :key="index">
+                <div class="carousel-image-box">
+                  <el-image 
+                    :src="img.url" 
+                    fit="cover" 
+                    class="carousel-image"
+                    :preview-src-list="originalImages.map(i => i.url)"
+                    :initial-index="index"
+                    preview-teleported
+                  >
+                    <template #placeholder>
+                      <div class="image-slot">加载中...</div>
+                    </template>
+                  </el-image>
+                </div>
+              </el-carousel-item>
+            </el-carousel>
+          </div>
+          <!-- 文本展示区 -->
+          <div class="preview-text-content">
+            {{ adaptedResult.preview }}
+          </div>
         </div>
       </div>
     </div>
@@ -204,7 +200,15 @@ const originalImages = computed(() => adapterStore.originalImages);
 const handleCopy = () => {
   if (!adaptedResult.value) return;
   
-  const text = `${adaptedResult.value.title}\n\n${adaptedResult.value.content}\n\n${(adaptedResult.value.tags || []).join(' ')}`;
+  let text = `${adaptedResult.value.title}\n\n${adaptedResult.value.content}\n\n${(adaptedResult.value.tags || []).join(' ')}`;
+  
+  // 如果有配图，将配图链接追加在后面
+  if (originalImages.value && originalImages.value.length > 0) {
+    text += '\n\n[附带配图链接]:';
+    originalImages.value.forEach((img, i) => {
+      text += `\n图 ${i + 1}: ${img.url}`;
+    });
+  }
   
   navigator.clipboard.writeText(text).then(() => {
     ElMessage.success('已复制到剪贴板');
@@ -223,25 +227,47 @@ const handleExport = (format) => {
   let content, filename, mimeType;
   
   switch (format) {
-    case 'txt':
-      content = `${result.title}\n\n${result.content}\n\n${(result.tags || []).join(' ')}`;
+    case 'txt': {
+      let txtContent = `${result.title}\n\n${result.content}\n\n${(result.tags || []).join(' ')}`;
+      if (originalImages.value && originalImages.value.length > 0) {
+        txtContent += '\n\n[附带配图链接]:';
+        originalImages.value.forEach((img, i) => {
+          txtContent += `\n图 ${i + 1}: ${img.url}`;
+        });
+      }
+      content = txtContent;
       filename = `content_${platform}_${timestamp}.txt`;
       mimeType = 'text/plain;charset=utf-8';
       break;
+    }
       
-    case 'md':
-      content = `# ${result.title}\n\n${result.content}\n\n${(result.tags || []).map(tag => `**${tag}**`).join(' ')}`;
+    case 'md': {
+      let mdImages = '';
+      if (originalImages.value && originalImages.value.length > 0) {
+        mdImages = originalImages.value.map(img => `![配图](${img.url})`).join('\n\n') + '\n\n';
+      }
+      content = `# ${result.title}\n\n${mdImages}${result.content}\n\n${(result.tags || []).map(tag => `**${tag}**`).join(' ')}`;
       filename = `content_${platform}_${timestamp}.md`;
       mimeType = 'text/markdown;charset=utf-8';
       break;
+    }
       
-    case 'json':
-      content = JSON.stringify(result, null, 2);
+    case 'json': {
+      const fullResult = {
+        ...result,
+        images: originalImages.value || []
+      };
+      content = JSON.stringify(fullResult, null, 2);
       filename = `content_${platform}_${timestamp}.json`;
       mimeType = 'application/json;charset=utf-8';
       break;
+    }
       
-    case 'html':
+    case 'html': {
+      let htmlImages = '';
+      if (originalImages.value && originalImages.value.length > 0) {
+        htmlImages = '<div class="images">' + originalImages.value.map(img => `<img src="${img.url}" alt="配图" />`).join('') + '</div>';
+      }
       content = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -261,9 +287,21 @@ const handleExport = (format) => {
       border-bottom: 2px solid #eee;
       padding-bottom: 10px;
     }
+    .images {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .images img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+    }
     .content {
       color: #555;
       white-space: pre-wrap;
+      font-size: 16px;
     }
     .tags {
       margin-top: 20px;
@@ -280,12 +318,17 @@ const handleExport = (format) => {
 </head>
 <body>
   <h1>${result.title}</h1>
+  ${htmlImages}
   <div class="content">${result.content}</div>
   <div class="tags">
     ${(result.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
   </div>
 </body>
 </html>`;
+      filename = `content_${platform}_${timestamp}.html`;
+      mimeType = 'text/html;charset=utf-8';
+      break;
+    }
       filename = `content_${platform}_${timestamp}.html`;
       mimeType = 'text/html;charset=utf-8';
       break;
@@ -364,14 +407,34 @@ const handleExport = (format) => {
 }
 
 .preview-full {
-  white-space: pre-wrap;
-  line-height: 1.8;
-  color: #606266;
-  font-size: 13px;
-  font-family: 'Courier New', monospace;
   background-color: #f9f9f9;
   border-radius: 6px;
   border-left: 3px solid #909399;
+  padding: 15px;
+}
+.preview-carousel-wrap {
+  margin-bottom: 20px;
+  background: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05);
+}
+.carousel-image-box {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.carousel-image {
+  width: 100%;
+  height: 100%;
+}
+.preview-text-content {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: #333;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .tag-item {

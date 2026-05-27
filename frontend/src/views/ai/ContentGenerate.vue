@@ -4,7 +4,28 @@
       <el-card class="page-header">
         <template #header>
           <h2>文案生成与编辑器</h2>
-        </template>
+        
+    <el-dialog v-model="materialsDialogVisible" title="从素材库选取图片" width="700px">
+      <div class="material-grid" v-loading="materialsLoading">
+        <el-row :gutter="15">
+          <el-col :span="8" v-for="m in materialsList" :key="m.id" style="margin-bottom: 15px">
+            <el-card shadow="hover" :body-style="{ padding: '0px' }" class="material-select-card" @click="toggleSelectMaterial(m)">
+              <el-image :src="normalizePreview(m.preview)" fit="cover" style="width: 100%; height: 120px;" />
+              <div class="material-select-mask" v-if="selectedMaterials.includes(m)">
+                <el-icon color="#fff" :size="32"><Select /></el-icon>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-empty v-if="materialsList.length === 0" description="暂无图片素材" />
+      </div>
+      <template #footer>
+        <el-button @click="materialsDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSelectMaterials">确认插入 ({{ selectedMaterials.length }})</el-button>
+      </template>
+    </el-dialog>
+
+</template>
         <p class="page-desc">一键生成高质量文案，支持人工二次编辑与质量评估</p>
       </el-card>
 
@@ -115,6 +136,10 @@
               <el-icon><Picture /></el-icon>
               AI 智能配图
             </el-button>
+            <el-button size="small" type="primary" plain @click="handleOpenMaterials">
+              <el-icon><FolderOpened /></el-icon>
+              从素材库选取
+            </el-button>
           </div>
         </div>
       </template>
@@ -134,22 +159,45 @@
 
       <!-- AI 配图展示区 -->
       <div v-if="generatedImages.length > 0" class="image-gallery-wrap">
-        <el-divider>✨ 智能配图结果</el-divider>
-        <p class="image-tips">提取关键词: <strong>{{ generatedKeywords }}</strong> (点击查看大图或右键保存)</p>
+        <el-divider>✨ 智能配图与素材</el-divider>
+        <p class="image-tips" v-if="generatedKeywords">提取关键词: <strong>{{ generatedKeywords }}</strong> (点击查看大图或右键保存)</p>
         <el-row :gutter="20">
           <el-col :span="8" v-for="(img, index) in generatedImages" :key="index">
             <el-card shadow="hover" :body-style="{ padding: '0px' }" class="image-card">
-              <el-image 
-                :src="img.url" 
-                fit="cover" 
-                class="ai-image"
-                :preview-src-list="generatedImages.map(i => i.url)"
-                :initial-index="index"
-              >
-                <template #placeholder>
-                  <div class="image-slot">加载中...</div>
-                </template>
-              </el-image>
+              <div class="image-box">
+                <el-image 
+                  :src="img.url" 
+                  fit="cover" 
+                  class="ai-image"
+                  :preview-src-list="generatedImages.map(i => i.url)"
+                  :initial-index="index"
+                  preview-teleported
+                >
+                  <template #placeholder>
+                    <div class="image-slot">加载中...</div>
+                  </template>
+                </el-image>
+                <div class="image-overlay">
+                  <el-button 
+                    size="small" 
+                    type="success" 
+                    circle 
+                    title="存为素材"
+                    @click="handleSaveToMaterial(img.url)"
+                  >
+                    <el-icon><Collection /></el-icon>
+                  </el-button>
+                  <el-button 
+                    size="small" 
+                    type="danger" 
+                    circle 
+                    title="移除图片"
+                    @click="handleRemoveImage(index)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
             </el-card>
           </el-col>
         </el-row>
@@ -192,10 +240,15 @@ import {
   Platform,
   DocumentAdd,
   DataAnalysis,
-  Picture
+  Picture,
+  FolderOpened,
+  Collection,
+  Delete,
+  Select
 } from "@element-plus/icons-vue";
 import request from "@/api/index";
 import { generateContent as apiGenerateContent, generateContentStream, evaluateContent as apiEvaluateContent, generateImages } from "@/api/ai";
+import { fetchMaterials, createMaterial } from "@/api/materials";
 import { useAdapterStore } from "@/stores/adapter";
 
 import { QuillEditor } from "@vueup/vue-quill";
@@ -500,6 +553,73 @@ const handleGenerateImage = async () => {
     generateImageLoading.value = false;
   }
 };
+
+const API_BASE = import.meta.env.VITE_APP_API_BASE_URL || "http://localhost:8000";
+function normalizePreview(p) {
+  if (!p) return "";
+  if (p.startsWith("http")) return p;
+  if (p.startsWith("/")) return `${API_BASE}${p}`;
+  return p;
+}
+
+// 素材库相关逻辑
+const materialsDialogVisible = ref(false);
+const materialsLoading = ref(false);
+const materialsList = ref([]);
+const selectedMaterials = ref([]);
+
+const handleOpenMaterials = async () => {
+  materialsDialogVisible.value = true;
+  materialsLoading.value = true;
+  selectedMaterials.value = [];
+  try {
+    const res = await fetchMaterials({ category: '图片' });
+    materialsList.value = Array.isArray(res) ? res : (res?.data || []);
+  } catch (err) {
+    ElMessage.error('拉取素材库失败');
+  } finally {
+    materialsLoading.value = false;
+  }
+};
+
+const toggleSelectMaterial = (m) => {
+  const idx = selectedMaterials.value.indexOf(m);
+  if (idx > -1) {
+    selectedMaterials.value.splice(idx, 1);
+  } else {
+    selectedMaterials.value.push(m);
+  }
+};
+
+const confirmSelectMaterials = () => {
+  const newImages = selectedMaterials.value.map(m => ({
+    url: normalizePreview(m.preview),
+    keyword: m.title,
+    description: m.description || '素材库图片'
+  }));
+  generatedImages.value = [...generatedImages.value, ...newImages];
+  materialsDialogVisible.value = false;
+  ElMessage.success('已成功导入配图');
+};
+
+const handleRemoveImage = (index) => {
+  generatedImages.value.splice(index, 1);
+};
+
+const handleSaveToMaterial = async (url) => {
+  try {
+    await createMaterial({
+      title: 'AI 生成配图',
+      description: generateForm.topic || '文案生成附带的AI配图',
+      category: '图片',
+      preview: url
+    });
+    ElMessage.success('已成功保存至素材库');
+  } catch (err) {
+    ElMessage.error('保存至素材库失败');
+  }
+};
+
 </script>
 
 <style scoped>
@@ -616,14 +736,44 @@ const handleGenerateImage = async () => {
   border: none;
   background-color: #f5f7fa;
 }
+.image-box {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transition: transform 0.3s;
+}
+.image-card:hover .image-box {
+  transform: scale(1.05);
+}
 .ai-image {
   width: 100%;
   height: 100%;
-  transition: transform 0.3s;
 }
-.ai-image:hover {
-  transform: scale(1.05);
+.image-overlay {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
 }
+.image-card:hover .image-overlay {
+  opacity: 1;
+}
+.material-select-card {
+  cursor: pointer;
+  position: relative;
+}
+.material-select-mask {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .image-slot {
   display: flex;
   justify-content: center;
