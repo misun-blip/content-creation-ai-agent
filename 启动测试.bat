@@ -89,6 +89,12 @@ cd /d "%~dp0"
 
 set "HEALTH_URL=http://127.0.0.1:8000/health"
 
+echo [提示] 正在确保基础依赖 (MySQL/Redis) 已启动...
+docker-compose up -d mysql redis
+if errorlevel 1 (
+    echo [警告] 尝试启动 Docker 服务失败，如果本机已安装 MySQL/Redis 则可继续。
+)
+
 REM 先检测是否已有后端在跑
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri '%HEALTH_URL%' -TimeoutSec 2 -UseBasicParsing -Proxy $null -ErrorAction Stop; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 300) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 (
