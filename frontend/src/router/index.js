@@ -40,12 +40,6 @@ const routes = [
         },
       },
       {
-        path: "/records",
-        name: "RecordList",
-        component: () => import("@/views/records/RecordList.vue"),
-        meta: { title: "创作记录", requiresAuth: true },
-      },
-      {
         path: "/records/:id/versions",
         name: "VersionCompare",
         component: () => import("@/views/records/VersionCompare.vue"),
