@@ -246,6 +246,8 @@ async def generate_images(req: ImageRequest):
     流程：AI 提取英文关键词 → LoremFlickr 免费 API 获取图片 → 返回图片列表
     """
     import urllib.parse
+    import random
+    import time
     
     try:
         # 1. 用 AI 将中文主题翻译为英文搜索关键词
@@ -261,13 +263,20 @@ async def generate_images(req: ImageRequest):
 
         # 2. 调用 LoremFlickr 免费 API 搜索图片
         images = []
-        # 将逗号分隔的关键词转换为 LoremFlickr 接受的逗号分隔格式（URL Encode）
         safe_keywords = urllib.parse.quote(keywords)
         
+        # 使用大跨度随机种子 + 时间戳，确保每张图片都不同
+        base_seed = int(time.time()) % 100000
+        used_locks = set()
+        
         for i in range(req.count):
-            # LoremFlickr 接口：https://loremflickr.com/宽/高/关键词?lock=随机种子
-            # 使用 lock 参数确保每次生成的图片不同且固定
-            img_url = f"https://loremflickr.com/800/600/{safe_keywords}?lock={i+10}"
+            # 生成不重复的随机 lock 值（跨度至少 1000）
+            lock_val = base_seed + i * 1000 + random.randint(0, 999)
+            while lock_val in used_locks:
+                lock_val += random.randint(1, 500)
+            used_locks.add(lock_val)
+            
+            img_url = f"https://loremflickr.com/800/600/{safe_keywords}?lock={lock_val}"
             images.append({
                 "url": img_url,
                 "keyword": keywords,
